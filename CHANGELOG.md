@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Added an icon and screenshots to the listing.
+- Table delete buttons are labelled, with shortcuts for deleting a row or column.
+
 ## 0.1.0
 
 First version.

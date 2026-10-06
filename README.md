@@ -2,6 +2,8 @@
 
 A Markdown editor for VS Code that removes the need for a separate preview. You edit one document and choose how much of the syntax you want to see.
 
+![The same document in raw, half preview and full preview](images/modes.png)
+
 | Mode | What you see | How you edit |
 | :--- | :----------- | :----------- |
 | **Raw** | Plain Markdown with syntax colours | Like any text file |
@@ -10,6 +12,18 @@ A Markdown editor for VS Code that removes the need for a separate preview. You 
 
 Switching modes is instant and keeps your place. The mode is remembered per file.
 
+In half preview, the element under the cursor shows its Markdown. Here the cursor is in the image path, and the image stays visible:
+
+![Half preview with the image path revealed under the cursor](images/half-preview.png)
+
+Tables are edited in place, with a bar for rows, columns and alignment:
+
+![Editing a table cell](images/table.png)
+
+Full preview hides all syntax; links and images are edited in a popover. It follows your colour theme:
+
+![Full preview in a dark theme with the link popover](images/full-preview-dark.png)
+
 The file on disk is always plain Markdown. The editor never rewrites text you did not touch: opening and saving a file leaves it byte for byte the same. The only reformatting it does is to re-align the pipes of a table whose cell you edited (this can be turned off).
 
 ## Getting started
@@ -17,7 +31,7 @@ The file on disk is always plain Markdown. The editor never rewrites text you di
 1. Install the packaged extension:
 
    ```bash
-   code --install-extension seamless-markdown-0.1.0.vsix
+   code --install-extension seamless-markdown-0.1.1.vsix
    ```
 
 2. Open a Markdown file, then click the preview icon in the editor title bar, or run **Seamless Markdown: Open with Seamless Markdown** from the Command Palette.
@@ -99,6 +113,7 @@ npm run build              # bundles into dist/
 npm test                   # unit tests
 npm run test:integration   # runs the editor inside a real VS Code
 npm run package            # produces the .vsix
+npm run screenshots        # regenerates the icon and README images
 ```
 
 `npm run harness` serves the project on port 5173. `http://localhost:5173/harness/index.html?doc=features.md&mode=half&theme=dark` runs the editor in a plain browser against a stand-in for the extension host, which is the quickest way to work on rendering.
