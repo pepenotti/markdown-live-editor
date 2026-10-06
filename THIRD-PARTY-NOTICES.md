@@ -1,0 +1,56 @@
+# Third-party notices
+
+The editor bundle (`dist/webview.js`) includes the packages below. Each is distributed under the licence shown; the full licence text ships with the package and is available at its repository.
+
+| Package | Version | Licence | Repository |
+| :------ | :------ | :------ | :--------- |
+| @codemirror/autocomplete | 6.20.3 | MIT | https://code.haverbeke.berlin/codemirror/autocomplete |
+| @codemirror/commands | 6.11.1 | MIT | https://code.haverbeke.berlin/codemirror/commands |
+| @codemirror/lang-angular | 0.1.4 | MIT | https://github.com/codemirror/lang-angular |
+| @codemirror/lang-cpp | 6.0.3 | MIT | https://github.com/codemirror/lang-cpp |
+| @codemirror/lang-css | 6.3.1 | MIT | https://github.com/codemirror/lang-css |
+| @codemirror/lang-go | 6.0.1 | MIT | https://github.com/codemirror/lang-go |
+| @codemirror/lang-html | 6.4.12 | MIT | https://code.haverbeke.berlin/codemirror/lang-html |
+| @codemirror/lang-java | 6.0.2 | MIT | https://github.com/codemirror/lang-java |
+| @codemirror/lang-javascript | 6.2.5 | MIT | https://github.com/codemirror/lang-javascript |
+| @codemirror/lang-jinja | 6.0.1 | MIT | https://code.haverbeke.berlin/codemirror/lang-jinja |
+| @codemirror/lang-json | 6.0.2 | MIT | https://github.com/codemirror/lang-json |
+| @codemirror/lang-less | 6.0.2 | MIT | https://github.com/codemirror/lang-less |
+| @codemirror/lang-liquid | 6.3.3 | MIT | https://code.haverbeke.berlin/codemirror/lang-liquid |
+| @codemirror/lang-markdown | 6.5.2 | MIT | https://code.haverbeke.berlin/codemirror/lang-markdown |
+| @codemirror/lang-php | 6.0.2 | MIT | https://github.com/codemirror/lang-php |
+| @codemirror/lang-python | 6.2.1 | MIT | https://github.com/codemirror/lang-python |
+| @codemirror/lang-rust | 6.0.2 | MIT | https://github.com/codemirror/lang-rust |
+| @codemirror/lang-sass | 6.0.2 | MIT | https://github.com/codemirror/lang-sass |
+| @codemirror/lang-sql | 6.10.0 | MIT | https://github.com/codemirror/lang-sql |
+| @codemirror/lang-vue | 0.1.3 | MIT | https://github.com/codemirror/lang-vue |
+| @codemirror/lang-wast | 6.0.2 | MIT | https://github.com/codemirror/lang-wast |
+| @codemirror/lang-xml | 6.1.0 | MIT | https://github.com/codemirror/lang-xml |
+| @codemirror/lang-yaml | 6.1.3 | MIT | https://github.com/codemirror/lang-yaml |
+| @codemirror/language | 6.12.4 | MIT | https://code.haverbeke.berlin/codemirror/language |
+| @codemirror/language-data | 6.5.2 | MIT | https://github.com/codemirror/language-data |
+| @codemirror/legacy-modes | 6.5.4 | MIT | https://code.haverbeke.berlin/codemirror/legacy-modes |
+| @codemirror/search | 6.7.2 | MIT | https://code.haverbeke.berlin/codemirror/search |
+| @codemirror/state | 6.7.6 | MIT | https://code.haverbeke.berlin/codemirror/state |
+| @codemirror/view | 6.43.13 | MIT | https://code.haverbeke.berlin/codemirror/view |
+| @lezer/common | 1.5.3 | MIT | https://code.haverbeke.berlin/lezer/common |
+| @lezer/cpp | 1.1.6 | MIT | https://code.haverbeke.berlin/lezer/cpp |
+| @lezer/css | 1.3.8 | MIT | https://code.haverbeke.berlin/lezer/css |
+| @lezer/go | 1.0.1 | MIT | https://github.com/lezer-parser/go |
+| @lezer/highlight | 1.2.5 | MIT | https://code.haverbeke.berlin/lezer/highlight |
+| @lezer/html | 1.3.13 | MIT | https://github.com/lezer-parser/html |
+| @lezer/java | 1.1.4 | MIT | https://code.haverbeke.berlin/lezer/java |
+| @lezer/javascript | 1.5.6 | MIT | https://code.haverbeke.berlin/lezer/javascript |
+| @lezer/json | 1.0.3 | MIT | https://github.com/lezer-parser/json |
+| @lezer/lr | 1.4.10 | MIT | https://code.haverbeke.berlin/lezer/lr |
+| @lezer/markdown | 1.7.2 | MIT | https://code.haverbeke.berlin/lezer/markdown |
+| @lezer/php | 1.0.6 | MIT | https://code.haverbeke.berlin/lezer/php |
+| @lezer/python | 1.1.19 | MIT | https://code.haverbeke.berlin/lezer/python |
+| @lezer/rust | 1.0.3 | MIT | https://code.haverbeke.berlin/lezer/rust |
+| @lezer/sass | 1.1.0 | MIT | https://github.com/lezer-parser/sass |
+| @lezer/xml | 1.0.6 | MIT | https://github.com/lezer-parser/xml |
+| @lezer/yaml | 1.0.4 | MIT | https://github.com/lezer-parser/yaml |
+| @marijn/find-cluster-break | 1.0.4 | MIT | https://code.haverbeke.berlin/marijn/find-cluster-break |
+| crelt | 1.0.7 | MIT | https://code.haverbeke.berlin/marijn/crelt |
+| style-mod | 4.1.4 | MIT | https://code.haverbeke.berlin/marijn/style-mod |
+| w3c-keyname | 2.2.8 | MIT | https://github.com/marijnh/w3c-keyname |

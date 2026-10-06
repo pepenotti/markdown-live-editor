@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Same policy shape as the real webview, so CSP problems show up here first. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self' https: data: blob:; style-src 'self' 'nonce-harness'; script-src 'self' 'nonce-harness'; connect-src 'self';"
+    />
+    <meta name="mdl-nonce" content="harness" />
+    <title>Markdown Live Editor harness</title>
+    <link rel="stylesheet" href="../dist/webview.css" />
+    <style nonce="harness">
+      html.theme-dark {
+        --vscode-editor-background: #1f1f1f;
+        --vscode-editor-foreground: #cccccc;
+        --vscode-descriptionForeground: #9d9d9d;
+        --vscode-editorWidget-border: #454545;
+        --vscode-editorWidget-background: #252526;
+        --vscode-textLink-foreground: #4daafc;
+        --vscode-textCodeBlock-background: #2b2b2b;
+        --vscode-textBlockQuote-border: #616161;
+        --vscode-editor-selectionBackground: #264f78;
+        --vscode-editor-inactiveSelectionBackground: #3a3d41;
+        --vscode-editorCursor-foreground: #aeafad;
+        --vscode-focusBorder: #0078d4;
+        --vscode-toolbar-hoverBackground: rgba(90, 93, 94, 0.31);
+        --vscode-input-background: #313131;
+        --vscode-input-foreground: #cccccc;
+        --vscode-input-border: #3c3c3c;
+        --vscode-button-background: #0078d4;
+        --vscode-button-foreground: #ffffff;
+        --vscode-list-activeSelectionBackground: #04395e;
+        --vscode-list-activeSelectionForeground: #ffffff;
+        --vscode-dropdown-background: #313131;
+        --vscode-dropdown-foreground: #cccccc;
+        --vscode-dropdown-border: #3c3c3c;
+        color-scheme: dark;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script nonce="harness">
+      // A stand-in for the extension host. Query: ?doc=features.md&mode=half&theme=dark
+      window.__MDL_HARNESS__ = true;
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const docName = params.get('doc') || 'features.md';
+        // VS Code defines its theme variables on <html> and marks the theme on <body>.
+        const dark = params.get('theme') === 'dark';
+        document.documentElement.classList.toggle('theme-dark', dark);
+        document.body.className = dark ? 'vscode-dark' : 'vscode-light';
+        const post = (m) => window.postMessage(m, '*');
+        let saved = null;
+        const h = (window.__harness = {
+          mirror: '',
+          epoch: 1,
+          edits: [],
+          errors: [],
+          opened: [],
+          stats: null,
+          mode: null,
+          files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
+          /** Pretend something else changed the document. */
+          external(text, reason) {
+            const a = h.mirror;
+            let from = 0;
+            while (from < a.length && from < text.length && a[from] === text[from]) from++;
+            let ea = a.length, eb = text.length;
+            while (ea > from && eb > from && a[ea - 1] === text[eb - 1]) { ea--; eb--; }
+            h.mirror = text;
+            h.epoch++;
+            post({ type: 'patch', from, to: ea, insert: text.slice(from, eb), epoch: h.epoch, reason });
+          },
+          command(id, arg) {
+            post({ type: 'command', id, arg });
+          },
+        });
+        function offsetOf(text, line, ch) {
+          let pos = 0;
+          for (let i = 0; i < line; i++) {
+            const nl = text.indexOf('\n', pos);
+            if (nl < 0) return -1;
+            pos = nl + 1;
+          }
+          return pos + ch;
+        }
+        function applyEdit(msg) {
+          if (msg.epoch !== h.epoch) {
+            h.errors.push('stale edit: epoch ' + msg.epoch + ' but host is at ' + h.epoch);
+            h.epoch++;
+            post({ type: 'sync', text: h.mirror, epoch: h.epoch });
+            return;
+          }
+          let out = '', pos = 0;
+          for (const c of msg.changes) {
+            // The real host addresses the document by line and character, so check both agree.
+            if (offsetOf(h.mirror, c.fromLine, c.fromCh) !== c.from || offsetOf(h.mirror, c.toLine, c.toCh) !== c.to) {
+              h.errors.push('line/offset mismatch in ' + JSON.stringify(c));
+            }
+            out += h.mirror.slice(pos, c.from) + c.insert;
+            pos = c.to;
+          }
+          h.mirror = out + h.mirror.slice(pos);
+          h.edits.push(msg.changes);
+        }
+        const respond = (reqId, data) => post({ type: 'response', reqId, ok: true, data });
+        window.acquireVsCodeApi = () => ({
+          getState: () => saved,
+          setState: (s) => { saved = s; },
+          postMessage(msg) {
+            switch (msg.type) {
+              case 'ready':
+                fetch('../sample/' + docName)
+                  .then((r) => r.text())
+                  .then((text) => {
+                    h.mirror = text.replace(/\r\n?/g, '\n');
+                    // ?repeat=40 makes a long document for checking speed.
+                    const repeat = Number(params.get('repeat') || 1);
+                    if (repeat > 1) h.mirror = Array.from({ length: repeat }, (_, i) => h.mirror.replace(/^---[\s\S]*?---\n/, i ? '' : '$&')).join('\n');
+                    post({
+                      type: 'init',
+                      text: h.mirror,
+                      epoch: h.epoch,
+                      mode: params.get('mode') || 'half',
+                      config: {
+                        defaultMode: 'half',
+                        lineWidth: Number(params.get('width') || 860),
+                        fontSize: 15,
+                        fontFamily: '',
+                        showToolbar: params.get('toolbar') !== '0',
+                        tableAutoAlign: params.get('align') !== '0',
+                      },
+                      baseUri: new URL('../sample', location.href).href,
+                      rootUri: new URL('../sample', location.href).href,
+                      isMac: /Mac/.test(navigator.platform),
+                    });
+                  });
+                break;
+              case 'edit':
+                applyEdit(msg);
+                break;
+              case 'log':
+                if (msg.level === 'error') h.errors.push(msg.message);
+                break;
+              case 'openLink':
+                h.opened.push(msg.href);
+                break;
+              case 'stats':
+                h.stats = msg;
+                break;
+              case 'modeChanged':
+                h.mode = msg.mode;
+                break;
+              case 'request':
+                if (msg.kind === 'listFiles') respond(msg.reqId, { files: h.files.filter((f) => !msg.payload.imagesOnly || /\.(png|svg|jpe?g|gif)$/.test(f)) });
+                else if (msg.kind === 'pickImage') respond(msg.reqId, { items: [{ path: 'assets/photo.png', isImage: true, name: 'photo.png' }] });
+                else if (msg.kind === 'saveImage') respond(msg.reqId, { path: 'assets/' + msg.payload.name, isImage: true, name: msg.payload.name });
+                else if (msg.kind === 'resolveUris') respond(msg.reqId, { items: msg.payload.uris.map((u) => ({ path: u.split('/').pop(), isImage: /\.(png|svg|jpe?g|gif)$/.test(u), name: u.split('/').pop() })) });
+                break;
+            }
+          },
+        });
+      })();
+    </script>
+    <script nonce="harness" src="../dist/webview.js"></script>
+  </body>
+</html>

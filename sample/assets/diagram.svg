@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" width="520" height="120" font-family="system-ui, sans-serif" font-size="13">
+  <rect width="520" height="120" rx="8" fill="#f3f5f8"/>
+  <g fill="#ffffff" stroke="#8a94a3" stroke-width="1.5">
+    <rect x="24" y="38" width="130" height="44" rx="6"/>
+    <rect x="195" y="38" width="130" height="44" rx="6"/>
+    <rect x="366" y="38" width="130" height="44" rx="6"/>
+  </g>
+  <g fill="#2b3340" text-anchor="middle">
+    <text x="89" y="65">Markdown file</text>
+    <text x="260" y="65">Editor</text>
+    <text x="431" y="65">Three modes</text>
+  </g>
+  <g stroke="#8a94a3" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M154 60h41M188 54l7 6-7 6"/>
+    <path d="M325 60h41M359 54l7 6-7 6"/>
+  </g>
+</svg>

@@ -1,0 +1,791 @@
+/* Markdown Live Editor. Colours come from the VS Code theme, with fallbacks for the browser harness. */
+body {
+  --mdl-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif);
+  --mdl-mono: var(--vscode-editor-font-family, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  --mdl-font-size: 15px;
+  --mdl-line-width: 860px;
+  --mdl-line-pad: 4px;
+  --mdl-bg: var(--vscode-editor-background, #ffffff);
+  --mdl-fg: var(--vscode-editor-foreground, #1f2328);
+  --mdl-dim: var(--vscode-descriptionForeground, #656d76);
+  --mdl-border: var(--vscode-editorWidget-border, var(--vscode-panel-border, #d0d7de));
+  --mdl-link: var(--vscode-textLink-foreground, #0969da);
+  --mdl-code-bg: var(--vscode-textCodeBlock-background, rgba(129, 139, 152, 0.14));
+  --mdl-quote: var(--vscode-textBlockQuote-border, #c5ccd3);
+  --mdl-selection: var(--vscode-editor-selectionBackground, #b6d6fd);
+  --mdl-selection-inactive: var(--vscode-editor-inactiveSelectionBackground, rgba(129, 139, 152, 0.25));
+  --mdl-cursor: var(--vscode-editorCursor-foreground, #1f2328);
+  --mdl-accent: var(--vscode-focusBorder, #0969da);
+  --mdl-hover: var(--vscode-toolbar-hoverBackground, rgba(129, 139, 152, 0.18));
+  --mdl-widget: var(--vscode-editorWidget-background, #f6f8fa);
+  --mdl-input-bg: var(--vscode-input-background, #ffffff);
+  --mdl-input-fg: var(--vscode-input-foreground, #1f2328);
+  --mdl-input-border: var(--vscode-input-border, var(--mdl-border));
+  --mdl-button-bg: var(--vscode-button-background, #0969da);
+  --mdl-button-fg: var(--vscode-button-foreground, #ffffff);
+  --mdl-list-active-bg: var(--vscode-list-activeSelectionBackground, #0969da);
+  --mdl-list-active-fg: var(--vscode-list-activeSelectionForeground, #ffffff);
+
+  --mdl-tok-keyword: #cf222e;
+  --mdl-tok-string: #0a3069;
+  --mdl-tok-number: #0550ae;
+  --mdl-tok-comment: #6e7781;
+  --mdl-tok-name: #8250df;
+  --mdl-tok-type: #953800;
+  --mdl-tok-heading: #0550ae;
+  --mdl-note: #0969da;
+  --mdl-tip: #1a7f37;
+  --mdl-important: #8250df;
+  --mdl-warning: #9a6700;
+  --mdl-caution: #cf222e;
+}
+body.vscode-dark,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) {
+  --mdl-tok-keyword: #ff7b72;
+  --mdl-tok-string: #a5d6ff;
+  --mdl-tok-number: #79c0ff;
+  --mdl-tok-comment: #8b949e;
+  --mdl-tok-name: #d2a8ff;
+  --mdl-tok-type: #ffa657;
+  --mdl-tok-heading: #79c0ff;
+  --mdl-note: #4493f8;
+  --mdl-tip: #3fb950;
+  --mdl-important: #ab7df8;
+  --mdl-warning: #d29922;
+  --mdl-caution: #f85149;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--mdl-bg);
+  color: var(--mdl-fg);
+  font-family: var(--mdl-font);
+  overflow: hidden;
+}
+[hidden] {
+  display: none !important;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.mdl-mono-probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+  font-family: var(--mdl-mono);
+  font-size: 100px;
+}
+
+/* ---------- toolbar ---------- */
+.mdl-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--mdl-border);
+  font-size: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mdl-toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.mdl-toolbar button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.mdl-toolbar-buttons button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  color: var(--vscode-icon-foreground, var(--mdl-fg));
+}
+.mdl-toolbar button:hover {
+  background: var(--mdl-hover);
+}
+.mdl-toolbar button:focus-visible,
+.mdl-heading:focus-visible {
+  outline: 1px solid var(--mdl-accent);
+  outline-offset: -1px;
+}
+.mdl-toolbar-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: var(--mdl-border);
+}
+.mdl-heading {
+  flex: none;
+  font: inherit;
+  height: 24px;
+  padding: 0 4px;
+  color: var(--vscode-dropdown-foreground, var(--mdl-fg));
+  background: var(--vscode-dropdown-background, var(--mdl-input-bg));
+  border: 1px solid var(--vscode-dropdown-border, var(--mdl-border));
+  border-radius: 4px;
+}
+.mdl-modes {
+  flex: none;
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--mdl-border);
+  border-radius: 6px;
+}
+.mdl-modes button {
+  padding: 2px 9px;
+  white-space: nowrap;
+  color: var(--mdl-dim);
+}
+.mdl-modes button.mdl-active,
+.mdl-modes button.mdl-active:hover {
+  background: var(--mdl-button-bg);
+  color: var(--mdl-button-fg);
+}
+
+/* ---------- editor frame ---------- */
+.mdl-editor {
+  flex: 1;
+  min-height: 0;
+}
+#app .cm-editor {
+  height: 100%;
+  background: var(--mdl-bg);
+  color: var(--mdl-fg);
+}
+#app .cm-editor.cm-focused {
+  outline: none;
+}
+#app .cm-scroller {
+  overflow: auto;
+  font-family: var(--mdl-font);
+  line-height: 1.6;
+}
+#app .cm-content {
+  box-sizing: border-box;
+  max-width: var(--mdl-line-width);
+  margin: 0 auto;
+  padding: 22px 32px 45vh;
+  font-size: var(--mdl-font-size);
+  caret-color: var(--mdl-cursor);
+}
+#app .cm-line {
+  padding: 0 var(--mdl-line-pad);
+}
+#app .mdl-mode-raw .cm-content {
+  max-width: none;
+  padding: 14px 18px 45vh;
+  font-family: var(--mdl-mono);
+  font-size: var(--vscode-editor-font-size, 13px);
+  line-height: 1.55;
+}
+#app .cm-cursor {
+  border-left: 2px solid var(--mdl-cursor);
+}
+#app .cm-selectionBackground {
+  background: var(--mdl-selection-inactive);
+}
+#app .cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: var(--mdl-selection);
+}
+#app .cm-content ::selection {
+  background: transparent;
+}
+#app .cm-md-cell ::selection,
+#app .cm-md-cell::selection {
+  background: var(--mdl-selection);
+}
+
+/* ---------- syntax colours (raw mode and code blocks) ---------- */
+#app .tok-keyword,
+#app .tok-operatorKeyword {
+  color: var(--mdl-tok-keyword);
+}
+#app .tok-string,
+#app .tok-string2,
+#app .tok-inserted {
+  color: var(--mdl-tok-string);
+}
+#app .tok-number,
+#app .tok-bool,
+#app .tok-atom,
+#app .tok-literal,
+#app .tok-propertyName {
+  color: var(--mdl-tok-number);
+}
+#app .tok-comment,
+#app .tok-meta {
+  color: var(--mdl-tok-comment);
+}
+#app .tok-comment {
+  font-style: italic;
+}
+#app .tok-variableName.tok-definition,
+#app .tok-className,
+#app .tok-macroName,
+#app .tok-labelName {
+  color: var(--mdl-tok-name);
+}
+#app .tok-typeName,
+#app .tok-namespace {
+  color: var(--mdl-tok-type);
+}
+#app .tok-deleted {
+  color: var(--mdl-tok-keyword);
+}
+#app .tok-strong {
+  font-weight: 600;
+}
+#app .tok-emphasis {
+  font-style: italic;
+}
+#app .tok-strikethrough {
+  text-decoration: line-through;
+}
+#app .mdl-mode-raw .tok-heading {
+  color: var(--mdl-tok-heading);
+  font-weight: 600;
+}
+#app .mdl-mode-raw .tok-link,
+#app .mdl-mode-raw .tok-url {
+  color: var(--mdl-link);
+}
+#app .mdl-mode-raw .tok-mark {
+  color: var(--mdl-tok-keyword);
+}
+#app .mdl-mode-raw .tok-monospace {
+  color: var(--mdl-tok-string);
+}
+#app .mdl-mode-raw .tok-quote {
+  color: var(--mdl-tip);
+}
+
+/* ---------- rendered Markdown ---------- */
+#app .cm-md-mark {
+  color: var(--mdl-dim);
+  font-weight: normal;
+  font-style: normal;
+}
+#app .cm-md-h {
+  font-weight: 600;
+  line-height: 1.3;
+}
+#app .cm-md-h {
+  position: relative;
+}
+#app .cm-md-fold {
+  /* Same font metrics as the heading, so the arrow sits on its text line; scaled down to a small mark. */
+  position: absolute;
+  left: -1.05em;
+  width: 1em;
+  text-align: center;
+  text-indent: 0;
+  font-weight: normal;
+  color: var(--mdl-dim);
+  transform: scale(0.5);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+}
+#app .cm-md-h:hover .cm-md-fold,
+#app .cm-md-fold-closed {
+  opacity: 1;
+}
+#app .cm-foldPlaceholder {
+  margin: 0 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--mdl-dim);
+  background: var(--mdl-code-bg);
+  border: 0;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+#app .cm-md-h1 {
+  font-size: 1.9em;
+  padding-top: 0.45em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--mdl-border);
+}
+#app .cm-md-h2 {
+  font-size: 1.45em;
+  padding-top: 0.5em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--mdl-border);
+}
+#app .cm-md-h3 {
+  font-size: 1.2em;
+  padding-top: 0.45em;
+}
+#app .cm-md-h4 {
+  font-size: 1.05em;
+  padding-top: 0.35em;
+}
+#app .cm-md-h5 {
+  font-size: 0.95em;
+  padding-top: 0.3em;
+}
+#app .cm-md-h6 {
+  font-size: 0.9em;
+  padding-top: 0.3em;
+  color: var(--mdl-dim);
+}
+#app .cm-md-em {
+  font-style: italic;
+}
+#app .cm-md-strong {
+  font-weight: 600;
+}
+#app .cm-md-strike {
+  text-decoration: line-through;
+}
+#app .cm-md-code {
+  font-family: var(--mdl-mono);
+  font-size: 0.88em;
+  background: var(--mdl-code-bg);
+  border-radius: 4px;
+  padding: 0.12em 0.32em;
+}
+#app .cm-md-link {
+  color: var(--mdl-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+#app .cm-md-url {
+  word-break: break-all;
+}
+
+#app .cm-md-quote {
+  border-left: 3px solid var(--mdl-quote);
+  padding-left: 14px;
+  color: var(--mdl-dim);
+}
+#app .cm-md-quote-nested {
+  padding-left: 30px;
+  background: linear-gradient(var(--mdl-quote), var(--mdl-quote)) 13px 0 / 3px 100% no-repeat;
+}
+#app .cm-md-alert {
+  color: inherit;
+}
+#app .cm-md-alert-note {
+  border-left-color: var(--mdl-note);
+}
+#app .cm-md-alert-tip {
+  border-left-color: var(--mdl-tip);
+}
+#app .cm-md-alert-important {
+  border-left-color: var(--mdl-important);
+}
+#app .cm-md-alert-warning {
+  border-left-color: var(--mdl-warning);
+}
+#app .cm-md-alert-caution {
+  border-left-color: var(--mdl-caution);
+}
+#app .cm-md-alert-label {
+  font-weight: 600;
+}
+#app .cm-md-alert-note .cm-md-alert-label {
+  color: var(--mdl-note);
+}
+#app .cm-md-alert-tip .cm-md-alert-label {
+  color: var(--mdl-tip);
+}
+#app .cm-md-alert-important .cm-md-alert-label {
+  color: var(--mdl-important);
+}
+#app .cm-md-alert-warning .cm-md-alert-label {
+  color: var(--mdl-warning);
+}
+#app .cm-md-alert-caution .cm-md-alert-label {
+  color: var(--mdl-caution);
+}
+
+/* Lists: the marker and indentation use the fixed-width font so wrapped lines align. */
+#app .cm-md-list-prefix {
+  font-family: var(--mdl-mono);
+}
+#app .cm-md-bullet {
+  position: relative;
+}
+#app .cm-md-bullet,
+#app .cm-md-bullet * {
+  color: transparent;
+}
+#app .cm-md-bullet::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  text-indent: 0;
+  color: var(--mdl-dim);
+  font-family: var(--mdl-font);
+}
+#app .cm-md-ordinal {
+  color: var(--mdl-dim);
+}
+#app .cm-md-checkbox {
+  display: inline-block;
+  width: 2ch;
+  font-family: var(--mdl-mono);
+  text-indent: 0;
+  text-align: left;
+  vertical-align: baseline;
+}
+#app .cm-md-checkbox input {
+  margin: 0;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.12em;
+  accent-color: var(--mdl-accent);
+  cursor: pointer;
+}
+#app .cm-md-task-done {
+  color: var(--mdl-dim);
+}
+
+#app .cm-md-hr {
+  display: inline-block;
+  width: 100%;
+  height: 0;
+  border-top: 2px solid var(--mdl-border);
+  vertical-align: middle;
+  text-indent: 0;
+}
+
+#app .cm-md-codeblock {
+  background: var(--mdl-code-bg);
+  font-family: var(--mdl-mono);
+  font-size: 0.88em;
+  line-height: 1.55;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+#app .cm-md-codeblock-first {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+#app .cm-md-codeblock-last {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+#app .cm-md-fence-hidden {
+  font-size: 7px;
+}
+#app .cm-md-code-header {
+  display: inline-flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  text-indent: 0;
+  font-family: var(--mdl-font);
+  font-size: 0.9em;
+  color: var(--mdl-dim);
+  user-select: none;
+}
+#app .cm-md-code-copy {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0 6px;
+  cursor: pointer;
+  opacity: 0;
+}
+#app .cm-md-codeblock:hover .cm-md-code-copy,
+#app .cm-md-code-copy:focus-visible {
+  opacity: 1;
+}
+#app .cm-md-code-copy:hover {
+  border-color: var(--mdl-border);
+  background: var(--mdl-hover);
+}
+
+#app .cm-md-html,
+#app .cm-md-table-source {
+  font-family: var(--mdl-mono);
+  font-size: 0.88em;
+}
+#app .cm-md-html {
+  color: var(--mdl-dim);
+}
+#app .cm-md-frontmatter {
+  background: var(--mdl-code-bg);
+  font-family: var(--mdl-mono);
+  font-size: 0.85em;
+  color: var(--mdl-dim);
+  padding-left: 14px;
+  padding-right: 14px;
+}
+#app .cm-md-frontmatter-first {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+#app .cm-md-frontmatter-last {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+#app .cm-md-frontmatter-chip {
+  padding: 2px var(--mdl-line-pad) 8px;
+}
+#app .cm-md-frontmatter-chip button {
+  font: inherit;
+  font-size: 0.8em;
+  color: var(--mdl-dim);
+  background: var(--mdl-code-bg);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 1px 10px;
+  cursor: pointer;
+}
+#app .cm-md-frontmatter-chip button:hover {
+  border-color: var(--mdl-border);
+}
+
+/* ---------- images ---------- */
+#app .cm-md-image {
+  display: inline-block;
+  max-width: 100%;
+  text-indent: 0;
+  vertical-align: bottom;
+  line-height: 0;
+}
+#app .cm-md-image-below {
+  display: inline-block;
+  width: 100%;
+  padding-top: 4px;
+}
+#app .cm-md-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+#app .cm-md-image-missing {
+  display: none;
+}
+#app .cm-md-image-error img {
+  display: none;
+}
+#app .cm-md-image-error .cm-md-image-missing {
+  display: inline-block;
+  line-height: 1.4;
+  padding: 5px 10px;
+  border: 1px dashed var(--mdl-border);
+  border-radius: 6px;
+  color: var(--mdl-dim);
+  font-family: var(--mdl-font);
+  font-size: 0.85em;
+}
+
+/* ---------- tables ---------- */
+#app .cm-md-table-wrap {
+  position: relative;
+  padding: 6px var(--mdl-line-pad) 8px;
+}
+#app .cm-md-table-scroll {
+  overflow-x: auto;
+}
+#app .cm-md-table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+#app .cm-md-table th,
+#app .cm-md-table td {
+  border: 1px solid var(--mdl-border);
+  padding: 0;
+  min-width: 56px;
+  vertical-align: top;
+  text-align: left;
+}
+#app .cm-md-table th {
+  font-weight: 600;
+  background: var(--mdl-widget);
+}
+#app .cm-md-cell {
+  padding: 5px 12px;
+  min-height: 1.5em;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+#app .cm-md-cell:focus {
+  box-shadow: inset 0 0 0 2px var(--mdl-accent);
+}
+#app .cm-md-cell-image {
+  max-height: 3em;
+  vertical-align: middle;
+}
+#app .cm-md-table-tools {
+  position: absolute;
+  z-index: 5;
+  right: var(--mdl-line-pad);
+  bottom: 100%;
+  margin-bottom: -4px;
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 4px;
+  background: var(--mdl-widget);
+  border: 1px solid var(--mdl-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  font-family: var(--mdl-font);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+#app .cm-md-table-active .cm-md-table-tools {
+  display: flex;
+}
+#app .cm-md-table-tools-label {
+  color: var(--mdl-dim);
+  padding: 0 3px 0 2px;
+}
+#app .cm-md-table-tools-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--mdl-border);
+}
+#app .cm-md-table-tools button {
+  font: inherit;
+  color: inherit;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 3px;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#app .cm-md-table-tools button:hover {
+  background: var(--mdl-hover);
+}
+
+/* ---------- popovers, completion, search ---------- */
+#app .cm-tooltip {
+  background: var(--mdl-widget);
+  color: var(--mdl-fg);
+  border: 1px solid var(--mdl-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-family: var(--mdl-font);
+  font-size: 12px;
+}
+#app .cm-md-popover {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  width: min(380px, 80vw);
+}
+#app .cm-md-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#app .cm-md-popover-row span {
+  flex: none;
+  width: 52px;
+  color: var(--mdl-dim);
+}
+#app .cm-md-popover input,
+#app .cm-panels input.cm-textfield {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 3px 6px;
+  color: var(--mdl-input-fg);
+  background: var(--mdl-input-bg);
+  border: 1px solid var(--mdl-input-border);
+  border-radius: 4px;
+}
+#app .cm-md-popover input:focus,
+#app .cm-panels input.cm-textfield:focus {
+  outline: 1px solid var(--mdl-accent);
+  outline-offset: -1px;
+}
+#app .cm-md-popover-note {
+  color: var(--mdl-dim);
+}
+#app .cm-md-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+#app .cm-md-popover-actions button,
+#app .cm-panels button.cm-button {
+  font: inherit;
+  color: inherit;
+  padding: 2px 9px;
+  background: none;
+  background-image: none;
+  border: 1px solid var(--mdl-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#app .cm-md-popover-actions button:hover,
+#app .cm-panels button.cm-button:hover {
+  background: var(--mdl-hover);
+}
+#app .cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: var(--mdl-font);
+  max-height: 16em;
+}
+#app .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 3px 10px;
+}
+#app .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--mdl-list-active-bg);
+  color: var(--mdl-list-active-fg);
+}
+#app .cm-completionDetail {
+  font-family: var(--mdl-mono);
+  font-style: normal;
+  opacity: 0.6;
+}
+#app .cm-panels {
+  background: var(--mdl-widget);
+  color: var(--mdl-fg);
+  border-color: var(--mdl-border);
+  font-family: var(--mdl-font);
+  font-size: 12px;
+}
+#app .cm-panels input[type='checkbox'] {
+  accent-color: var(--mdl-accent);
+}
+#app .cm-searchMatch {
+  background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 213, 0, 0.4));
+}
+#app .cm-searchMatch-selected {
+  background: var(--vscode-editor-findMatchBackground, rgba(255, 150, 50, 0.6));
+}
+#app .cm-md-table-tools button.cm-md-table-danger {
+  padding: 0 6px;
+  color: var(--vscode-errorForeground, #cf222e);
+}

@@ -1,0 +1,560 @@
+{
+  "name": "markdown-live-editor",
+  "displayName": "Markdown Live Editor",
+  "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
+  "version": "0.1.0",
+  "publisher": "pepenotti",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pepenotti/markdown-live-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pepenotti/markdown-live-editor/issues"
+  },
+  "homepage": "https://github.com/pepenotti/markdown-live-editor#readme",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "markdown",
+    "wysiwyg",
+    "live preview",
+    "table",
+    "editor"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "npm run build && vscode-test",
+    "harness": "python3 -m http.server 5173",
+    "package": "npm run build -- --production && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@lezer/common": "^1.5.3",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/markdown": "^1.7.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.4",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "markdownLive.editor",
+        "displayName": "Markdown Live Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.{md,markdown,mdown,mkd}"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "markdownLive.openWith",
+        "title": "Open with Markdown Live Editor",
+        "category": "Markdown Live",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "markdownLive.openSource",
+        "title": "Open as Plain Text",
+        "category": "Markdown Live",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "markdownLive.setAsDefault",
+        "title": "Use as Default Editor for Markdown",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.unsetAsDefault",
+        "title": "Stop Using as Default Editor",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.pickMode",
+        "title": "Choose Mode\u2026",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.cycleMode",
+        "title": "Switch to Next Mode",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.rawMode",
+        "title": "Raw Mode",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.halfPreviewMode",
+        "title": "Half Preview Mode",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.fullPreviewMode",
+        "title": "Full Preview Mode",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleBold",
+        "title": "Toggle Bold",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleItalic",
+        "title": "Toggle Italic",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleStrikethrough",
+        "title": "Toggle Strikethrough",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleInlineCode",
+        "title": "Toggle Inline Code",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.insertLink",
+        "title": "Insert or Edit Link",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.insertImage",
+        "title": "Insert Image\u2026",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.insertTable",
+        "title": "Insert Table",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.insertCodeBlock",
+        "title": "Insert Code Block",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.insertRule",
+        "title": "Insert Horizontal Rule",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleBulletList",
+        "title": "Toggle Bullet List",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleNumberedList",
+        "title": "Toggle Numbered List",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleTaskList",
+        "title": "Toggle Task List",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleTask",
+        "title": "Tick or Untick Task",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.toggleQuote",
+        "title": "Toggle Quote",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.heading1",
+        "title": "Heading 1",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.heading2",
+        "title": "Heading 2",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.heading3",
+        "title": "Heading 3",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.headingIncrease",
+        "title": "Increase Heading Level",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.headingDecrease",
+        "title": "Decrease Heading Level",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.goToHeading",
+        "title": "Go to Heading\u2026",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.find",
+        "title": "Find and Replace",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.undo",
+        "title": "Undo",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.redo",
+        "title": "Redo",
+        "category": "Markdown Live"
+      },
+      {
+        "command": "markdownLive.save",
+        "title": "Save",
+        "category": "Markdown Live"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "markdownLive.toggleBold",
+        "key": "ctrl+b",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+b"
+      },
+      {
+        "command": "markdownLive.toggleItalic",
+        "key": "ctrl+i",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+i"
+      },
+      {
+        "command": "markdownLive.toggleStrikethrough",
+        "key": "alt+shift+5",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+      },
+      {
+        "command": "markdownLive.toggleInlineCode",
+        "key": "ctrl+e",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+e"
+      },
+      {
+        "command": "markdownLive.insertLink",
+        "key": "ctrl+l",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+l"
+      },
+      {
+        "command": "markdownLive.toggleBulletList",
+        "key": "ctrl+shift+8",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+8"
+      },
+      {
+        "command": "markdownLive.toggleNumberedList",
+        "key": "ctrl+shift+7",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+7"
+      },
+      {
+        "command": "markdownLive.toggleQuote",
+        "key": "ctrl+shift+9",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+9"
+      },
+      {
+        "command": "markdownLive.toggleTask",
+        "key": "alt+c",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+      },
+      {
+        "command": "markdownLive.headingIncrease",
+        "key": "ctrl+shift+]",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+      },
+      {
+        "command": "markdownLive.headingDecrease",
+        "key": "ctrl+shift+[",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+      },
+      {
+        "command": "markdownLive.cycleMode",
+        "key": "alt+m",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+      },
+      {
+        "command": "markdownLive.find",
+        "key": "ctrl+f",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+f"
+      },
+      {
+        "command": "markdownLive.goToHeading",
+        "key": "ctrl+shift+o",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+o"
+      },
+      {
+        "command": "markdownLive.undo",
+        "key": "ctrl+z",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+z"
+      },
+      {
+        "command": "markdownLive.redo",
+        "key": "ctrl+y",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+z"
+      },
+      {
+        "command": "markdownLive.redo",
+        "key": "ctrl+shift+z",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+shift+z"
+      },
+      {
+        "command": "markdownLive.save",
+        "key": "ctrl+s",
+        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "mac": "cmd+s"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "markdownLive.openWith",
+          "when": "resourceLangId == markdown && !activeCustomEditorId"
+        },
+        {
+          "command": "markdownLive.openSource",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.pickMode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.cycleMode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.rawMode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.halfPreviewMode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.fullPreviewMode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleBold",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleItalic",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleStrikethrough",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleInlineCode",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.insertLink",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.insertImage",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.insertTable",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.insertCodeBlock",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.insertRule",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleBulletList",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleNumberedList",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleTaskList",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleTask",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.toggleQuote",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.heading1",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.heading2",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.heading3",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.headingIncrease",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.headingDecrease",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.goToHeading",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.find",
+          "when": "activeCustomEditorId == 'markdownLive.editor'"
+        },
+        {
+          "command": "markdownLive.undo",
+          "when": "false"
+        },
+        {
+          "command": "markdownLive.redo",
+          "when": "false"
+        },
+        {
+          "command": "markdownLive.save",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "markdownLive.openWith",
+          "when": "resourceLangId == markdown && !activeCustomEditorId && !isInDiffEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "markdownLive.openSource",
+          "when": "activeCustomEditorId == 'markdownLive.editor'",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "markdownLive.openWith",
+          "when": "resourceLangId == markdown",
+          "group": "navigation@90"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Markdown Live Editor",
+      "properties": {
+        "markdownLive.defaultMode": {
+          "type": "string",
+          "enum": [
+            "raw",
+            "half",
+            "full"
+          ],
+          "enumDescriptions": [
+            "Plain Markdown source.",
+            "Rendered, with the syntax shown for the element the cursor is on.",
+            "Looks like the finished document; syntax stays hidden and is edited through popovers and the toolbar."
+          ],
+          "default": "half",
+          "description": "Mode a Markdown file opens in when no mode has been remembered for it."
+        },
+        "markdownLive.rememberModePerFile": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reopen each file in the mode it was last used in."
+        },
+        "markdownLive.lineWidth": {
+          "type": "number",
+          "default": 860,
+          "minimum": 0,
+          "description": "Maximum width of the text column in the preview modes, in pixels. 0 uses the full width."
+        },
+        "markdownLive.fontSize": {
+          "type": "number",
+          "default": 15,
+          "minimum": 8,
+          "maximum": 40,
+          "description": "Font size of the preview modes, in pixels. Raw mode uses the editor font size."
+        },
+        "markdownLive.fontFamily": {
+          "type": "string",
+          "default": "",
+          "description": "Font family of the preview modes. Empty uses the VS Code interface font."
+        },
+        "markdownLive.showToolbar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the formatting toolbar above the document."
+        },
+        "markdownLive.imageFolder": {
+          "type": "string",
+          "default": "assets",
+          "markdownDescription": "Folder for pasted and dropped images, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name without its extension."
+        },
+        "markdownLive.tableAutoAlign": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-align the pipes of a table in the source whenever one of its cells is edited. When off, only the edited cell changes."
+        },
+        "markdownLive.promptToSetDefault": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask once whether Markdown files should open with this editor by default."
+        }
+      }
+    }
+  }
+}

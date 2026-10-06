@@ -1,0 +1,562 @@
+// Entry point of the webview: builds the CodeMirror editor and wires it to the host.
+import { closeBrackets } from '@codemirror/autocomplete';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { codeFolding, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
+import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
+import { drawSelection, dropCursor, EditorView, keymap, type ViewUpdate } from '@codemirror/view';
+import type { SyntaxNode } from '@lezer/common';
+import { classHighlighter, tagHighlighter, tags } from '@lezer/highlight';
+import {
+  type CommandId,
+  type EditorConfig,
+  type HostMessage,
+  isImagePath,
+  type LinkedFile,
+  type Mode,
+  MODES,
+} from '../shared/protocol';
+import { countWords, extractHeadings, slugify } from '../shared/textUtil';
+import {
+  type FormatCommand,
+  insertBlock,
+  insertCodeBlock,
+  insertLink,
+  insertPaths,
+  insertRule,
+  insertTable,
+  setHeading,
+  shiftHeading,
+  toggleInline,
+  toggleList,
+  toggleQuote,
+  toggleTask,
+} from './commands/format';
+import { hostActions, makeResolver, renderConfig, type RenderConfig } from './config';
+import { blockField } from './decorations/blocks';
+import { inlinePlugin, linkInfo } from './decorations/inline';
+import { editingBehaviour } from './fullMode';
+import { editGuard } from './guard';
+import { HostBridge } from './host';
+import { focusPopover, popoverField } from './linkPopover';
+import { markdownSupport } from './markdown';
+import { cursorFix, externalChange, modeField, setMode } from './modes';
+import { SyncClient } from './syncClient';
+import { tableFromTSV } from './table/model';
+import { completions, insideCode } from './ui/completions';
+import { createToolbar, type Toolbar } from './ui/toolbar';
+import { activeTableCell, focusTableAt, wrapInActiveCell } from './widgets/table';
+
+const host = new HostBridge();
+const problems: string[] = [];
+const report = (message: string) => {
+  problems.push(message);
+  host.log('error', message);
+};
+window.addEventListener('error', (e) => report(`${e.message} (${e.filename}:${e.lineno})`));
+window.addEventListener('unhandledrejection', (e) => report(`Unhandled rejection: ${String(e.reason)}`));
+document.addEventListener('securitypolicyviolation', (e) => report(`CSP blocked ${e.violatedDirective}: ${e.blockedURI || 'inline'}`));
+
+const nonce = document.querySelector<HTMLMetaElement>('meta[name="mdl-nonce"]')?.content ?? '';
+const app = document.getElementById('app')!;
+
+let view: EditorView | undefined;
+let sync: SyncClient | undefined;
+let toolbar: Toolbar | undefined;
+let config: EditorConfig;
+let isMac = /Mac/.test(navigator.platform);
+let resolveUrl: (src: string) => string = (s) => s;
+const renderCompartment = new Compartment();
+
+const markdownHighlighter = tagHighlighter([
+  { tag: tags.monospace, class: 'tok-monospace' },
+  { tag: tags.quote, class: 'tok-quote' },
+  { tag: tags.strikethrough, class: 'tok-strikethrough' },
+  { tag: tags.processingInstruction, class: 'tok-mark' },
+  { tag: tags.contentSeparator, class: 'tok-mark' },
+  { tag: tags.list, class: 'tok-list' },
+]);
+
+/* ---------- configuration ---------- */
+
+function measureMonoRatio(): number {
+  const probe = document.createElement('span');
+  probe.className = 'mdl-mono-probe';
+  probe.textContent = '0'.repeat(20);
+  document.body.append(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  const ratio = width / 20 / 100;
+  return ratio > 0.3 && ratio < 1 ? ratio : 0.6;
+}
+
+function currentRenderConfig(): RenderConfig {
+  return { resolveUrl, monoRatio: measureMonoRatio(), tableAutoAlign: config.tableAutoAlign };
+}
+
+function applyConfig(next: EditorConfig): void {
+  config = next;
+  const root = document.body.style;
+  root.setProperty('--mdl-font-size', `${next.fontSize}px`);
+  if (next.fontFamily.trim()) root.setProperty('--mdl-font', next.fontFamily);
+  else root.removeProperty('--mdl-font');
+  root.setProperty('--mdl-line-width', next.lineWidth > 0 ? `${next.lineWidth}px` : 'none');
+  toolbar?.setVisible(next.showToolbar);
+  view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
+}
+
+/* ---------- commands ---------- */
+
+const INLINE_MARKERS = { bold: '**', italic: '*', strike: '~~', code: '`' } as const;
+
+function apply(command: FormatCommand): void {
+  if (!view) return;
+  const spec = command(view.state);
+  if (spec) view.dispatch(spec);
+  view.focus();
+}
+
+function setEditorMode(mode: Mode): void {
+  if (!view || view.state.field(modeField) === mode) return;
+  sync?.flush();
+  const top = view.lineBlockAtHeight(view.scrollDOM.scrollTop).from;
+  view.dispatch({ effects: [setMode.of(mode), EditorView.scrollIntoView(top, { y: 'start' })] });
+  if (!activeTableCell()) view.focus();
+}
+
+function revealLine(line: number): void {
+  if (!view) return;
+  const doc = view.state.doc;
+  const pos = doc.line(Math.max(1, Math.min(doc.lines, line + 1))).from;
+  view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 24 }) });
+  view.focus();
+}
+
+function revealAnchor(anchor: string): void {
+  if (!view) return;
+  const wanted = slugify(decodeURIComponent(anchor.replace(/^#/, '')));
+  const seen = new Map<string, number>();
+  for (const h of extractHeadings(view.state.doc.toString())) {
+    // Repeated headings get -1, -2, … like on GitHub.
+    const base = slugify(h.text.replace(/[*_`~]/g, ''));
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    if ((count ? `${base}-${count}` : base) === wanted) {
+      revealLine(h.line);
+      return;
+    }
+  }
+}
+
+function openLink(href: string): void {
+  if (href.startsWith('#')) revealAnchor(href);
+  else if (href) host.post({ type: 'openLink', href });
+}
+
+async function pickImages(): Promise<LinkedFile[]> {
+  try {
+    return (await host.request<{ items: LinkedFile[] }>('pickImage')).items;
+  } catch (err) {
+    report(`Could not choose an image: ${String(err)}`);
+    return [];
+  }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Saves pasted or dropped image files next to the document and links them. */
+async function insertImageFiles(files: File[], at?: number): Promise<void> {
+  const items: LinkedFile[] = [];
+  for (const file of files) {
+    try {
+      const base64 = await fileToBase64(file);
+      const saved = await host.request<LinkedFile>('saveImage', { name: file.name || 'image.png', base64 });
+      items.push(saved);
+    } catch (err) {
+      report(`Could not save the image: ${String(err)}`);
+    }
+  }
+  if (!view || !items.length) return;
+  const pos = at === undefined ? undefined : Math.min(at, view.state.doc.length);
+  const spec = insertPaths(items, pos)(view.state);
+  if (spec) view.dispatch(spec);
+}
+
+function headingLevelAt(state: EditorState): number {
+  const m = /^ {0,3}(#{1,6})(?:[ \t]|$)/.exec(state.doc.lineAt(state.selection.main.head).text);
+  return m ? m[1].length : 0;
+}
+
+function runCommand(id: CommandId, arg?: unknown): void {
+  const v = view;
+  if (!v) return;
+  const active = document.activeElement;
+  const inField = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+  switch (id) {
+    case 'bold':
+    case 'italic':
+    case 'strike':
+    case 'code':
+      if (wrapInActiveCell(INLINE_MARKERS[id]) || inField) return;
+      return apply(toggleInline(id));
+    case 'link':
+      if (inField || activeTableCell()) return;
+      apply(insertLink);
+      if (v.state.field(modeField) === 'full') focusPopover(v);
+      return;
+    case 'image':
+      void pickImages().then((items) => {
+        if (items.length) apply(insertPaths(items));
+      });
+      return;
+    case 'insertImagePaths':
+      return apply(insertPaths(arg as LinkedFile[]));
+    case 'table': {
+      apply(insertTable(3, 3));
+      if (v.state.field(modeField) !== 'raw') {
+        const start = v.state.doc.lineAt(v.state.selection.main.from).from;
+        requestAnimationFrame(() => focusTableAt(v, start, 'first', true));
+      }
+      return;
+    }
+    case 'codeBlock':
+      return apply(insertCodeBlock);
+    case 'rule':
+      return apply(insertRule);
+    case 'bulletList':
+      return apply(toggleList('bullet'));
+    case 'orderedList':
+      return apply(toggleList('ordered'));
+    case 'taskList':
+      return apply(toggleList('task'));
+    case 'toggleTask':
+      return apply(toggleTask);
+    case 'quote':
+      return apply(toggleQuote);
+    case 'heading':
+      return apply(setHeading(Number(arg) || 1));
+    case 'headingUp':
+      return apply(shiftHeading(1));
+    case 'headingDown':
+      return apply(shiftHeading(-1));
+    case 'find':
+      openSearchPanel(v);
+      return;
+    case 'setMode':
+      if (MODES.includes(arg as Mode)) setEditorMode(arg as Mode);
+      return;
+    case 'cycleMode': {
+      const next = MODES[(MODES.indexOf(v.state.field(modeField)) + 1) % MODES.length];
+      setEditorMode(next);
+      return;
+    }
+    case 'revealLine':
+      return revealLine(Number(arg) || 0);
+    case 'revealAnchor':
+      return revealAnchor(String(arg ?? ''));
+    case 'focus':
+      v.focus();
+      return;
+  }
+}
+
+/** Keys that VS Code turns into commands. In VS Code they are only swallowed here. */
+const KEYS: { key: string; id: CommandId }[] = [
+  { key: 'Mod-b', id: 'bold' },
+  { key: 'Mod-i', id: 'italic' },
+  { key: 'Alt-Shift-5', id: 'strike' },
+  { key: 'Mod-e', id: 'code' },
+  { key: 'Mod-l', id: 'link' },
+  { key: 'Mod-Shift-8', id: 'bulletList' },
+  { key: 'Mod-Shift-7', id: 'orderedList' },
+  { key: 'Mod-Shift-9', id: 'quote' },
+  { key: 'Alt-c', id: 'toggleTask' },
+  { key: 'Ctrl-Shift-]', id: 'headingUp' },
+  { key: 'Ctrl-Shift-[', id: 'headingDown' },
+  { key: 'Alt-m', id: 'cycleMode' },
+  { key: 'Mod-f', id: 'find' },
+];
+
+/* ---------- events ---------- */
+
+function hrefAt(state: EditorState, pos: number): string | null {
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1); n; n = n.parent) {
+    if (n.name === 'Link' || n.name === 'Image') return linkInfo(state, n)?.href ?? null;
+    if (n.name === 'URL') return state.doc.sliceString(n.from, n.to).replace(/^<|>$/g, '');
+    if (n.name === 'Autolink') {
+      const url = n.getChild('URL');
+      return url ? state.doc.sliceString(url.from, url.to) : null;
+    }
+  }
+  return null;
+}
+
+const domHandlers = EditorView.domEventHandlers({
+  mousedown(event, v) {
+    if (event.button !== 0 || !(isMac ? event.metaKey : event.ctrlKey)) return false;
+    const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+    const href = pos === null ? null : (hrefAt(v.state, pos) ?? hrefAt(v.state, Math.min(pos + 1, v.state.doc.length)));
+    if (!href) return false;
+    event.preventDefault();
+    openLink(href);
+    return true;
+  },
+  paste(event, v) {
+    const data = event.clipboardData;
+    if (!data) return false;
+    const images = Array.from(data.files).filter((f) => f.type.startsWith('image/'));
+    if (images.length) {
+      event.preventDefault();
+      void insertImageFiles(images);
+      return true;
+    }
+    const text = data.getData('text/plain');
+    const sel = v.state.selection.main;
+    if (!text || insideCode(v.state, sel.from)) return false;
+    const selected = v.state.doc.sliceString(sel.from, sel.to);
+    const url = text.trim();
+    if (!sel.empty && !selected.includes('\n') && /^(?:https?:\/\/|mailto:)\S+$/i.test(url) && !/^(?:https?:\/\/|mailto:)/i.test(selected) && !hrefAt(v.state, sel.from)) {
+      event.preventDefault();
+      const insert = `[${selected}](${url})`;
+      v.dispatch({ changes: { from: sel.from, to: sel.to, insert }, selection: { anchor: sel.from + insert.length }, userEvent: 'input.paste' });
+      return true;
+    }
+    const table = tableFromTSV(text);
+    if (table) {
+      event.preventDefault();
+      if (!sel.empty) v.dispatch({ changes: { from: sel.from, to: sel.to }, userEvent: 'delete.selection' });
+      v.dispatch({ ...insertBlock(v.state, table), userEvent: 'input.paste' });
+      return true;
+    }
+    return false;
+  },
+  dragover(event) {
+    const types = event.dataTransfer?.types ?? [];
+    if (types.includes('Files') || types.includes('text/uri-list') || types.includes('application/vnd.code.uri-list')) event.preventDefault();
+    return false;
+  },
+  drop(event, v) {
+    const data = event.dataTransfer;
+    if (!data) return false;
+    const pos = v.posAtCoords({ x: event.clientX, y: event.clientY }) ?? v.state.selection.main.head;
+    const images = Array.from(data.files).filter((f) => f.type.startsWith('image/') || isImagePath(f.name));
+    if (images.length) {
+      event.preventDefault();
+      void insertImageFiles(images, pos);
+      return true;
+    }
+    const list = data.getData('application/vnd.code.uri-list') || data.getData('text/uri-list');
+    const uris = list.split(/\r?\n/).filter((u) => u && !u.startsWith('#'));
+    if (!uris.length) return false;
+    event.preventDefault();
+    void host
+      .request<{ items: LinkedFile[] }>('resolveUris', { uris })
+      .then(({ items }) => {
+        const spec = insertPaths(items, Math.min(pos, v.state.doc.length))(v.state);
+        if (spec) v.dispatch(spec);
+      })
+      .catch((err) => report(`Could not link the dropped file: ${String(err)}`));
+    return true;
+  },
+});
+
+let statsTimer: ReturnType<typeof setTimeout> | undefined;
+let stateTimer: ReturnType<typeof setTimeout> | undefined;
+
+function sendStats(): void {
+  if (!view) return;
+  const state = view.state;
+  const text = state.doc.toString();
+  const sel = state.selection.main;
+  host.post({
+    type: 'stats',
+    words: countWords(text),
+    chars: text.length,
+    selWords: sel.empty ? 0 : countWords(state.doc.sliceString(sel.from, sel.to)),
+  });
+}
+
+function saveState(): void {
+  if (!view) return;
+  const sel = view.state.selection.main;
+  host.setState({ anchor: sel.anchor, head: sel.head, scrollPos: view.scrollDOM.scrollTop });
+}
+
+function onUpdate(update: ViewUpdate): void {
+  for (const tr of update.transactions) {
+    if (tr.annotation(externalChange)) continue;
+    if (tr.docChanged) sync?.localChange(tr);
+    else if (tr.selection && !tr.annotation(cursorFix) && tr.isUserEvent('select')) sync?.flush();
+  }
+  const mode = update.state.field(modeField);
+  if (update.startState.field(modeField) !== mode) {
+    toolbar?.setMode(mode);
+    host.post({ type: 'modeChanged', mode });
+  }
+  if (update.docChanged || update.selectionSet) {
+    toolbar?.setHeading(headingLevelAt(update.state));
+    clearTimeout(statsTimer);
+    statsTimer = setTimeout(sendStats, 300);
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(saveState, 300);
+  }
+}
+
+/* ---------- start-up ---------- */
+
+function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
+  isMac = message.isMac;
+  resolveUrl = makeResolver(message.baseUri, message.rootUri);
+  config = message.config;
+  applyConfig(message.config);
+
+  toolbar = createToolbar(runCommand, isMac);
+  toolbar.setMode(message.mode);
+  toolbar.setVisible(config.showToolbar);
+  const editorHost = document.createElement('div');
+  editorHost.className = 'mdl-editor';
+  app.replaceChildren(toolbar.dom, editorHost);
+
+  const saved = host.getState();
+  const length = message.text.length;
+  const clamp = (n: number | undefined) => Math.max(0, Math.min(length, n ?? 0));
+
+  const extensions: Extension[] = [
+    modeField.init(() => message.mode),
+    renderCompartment.of(renderConfig.of(currentRenderConfig())),
+    hostActions.of({ openLink, pickImages }),
+    markdownSupport(),
+    syntaxHighlighting(classHighlighter),
+    syntaxHighlighting(markdownHighlighter),
+    EditorView.lineWrapping,
+    EditorState.allowMultipleSelections.of(true),
+    EditorView.clickAddsSelectionRange.of((e) => e.altKey),
+    indentUnit.of('  '),
+    EditorState.tabSize.of(4),
+    drawSelection(),
+    dropCursor(),
+    codeFolding({ placeholderText: '⋯' }),
+    keymap.of([
+      { key: 'Mod-Alt-[', run: foldCode },
+      { key: 'Mod-Alt-]', run: unfoldCode },
+    ]),
+    closeBrackets(),
+    blockField,
+    inlinePlugin,
+    editGuard,
+    editingBehaviour(),
+    popoverField,
+    // VS Code owns undo for the document; only the standalone page keeps its own history.
+    host.standalone ? [history(), keymap.of(historyKeymap)] : [],
+    search({ top: true }),
+    completions(host, runCommand),
+    keymap.of([
+      ...KEYS.map(({ key, id }) => ({
+        key,
+        preventDefault: true,
+        run: () => {
+          if (host.standalone) runCommand(id);
+          return true;
+        },
+      })),
+      ...searchKeymap,
+      ...defaultKeymap,
+      indentWithTab,
+    ]),
+    domHandlers,
+    EditorView.updateListener.of(onUpdate),
+    EditorView.editorAttributes.compute([modeField], (state) => ({ class: `mdl-mode-${state.field(modeField)}` })),
+    EditorView.contentAttributes.of({ 'aria-label': 'Markdown document' }),
+    nonce ? EditorView.cspNonce.of(nonce) : [],
+  ];
+
+  const state = EditorState.create({
+    doc: message.text,
+    selection: EditorSelection.single(clamp(saved.anchor), clamp(saved.head)),
+    extensions,
+  });
+  sync = new SyncClient(state, (epoch, changes) => host.post({ type: 'edit', epoch, changes }));
+  sync.epoch = message.epoch;
+  view = new EditorView({ state, parent: editorHost });
+  toolbar.setHeading(headingLevelAt(state));
+
+  if (saved.scrollPos) requestAnimationFrame(() => view && (view.scrollDOM.scrollTop = saved.scrollPos!));
+  view.scrollDOM.addEventListener('scroll', () => {
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(saveState, 300);
+  });
+  // The fixed-width font may finish loading after the first measurement.
+  void document.fonts?.ready.then(() => applyConfig(config));
+  sendStats();
+  if (document.hasFocus()) view.focus();
+}
+
+host.onMessage((message) => {
+  switch (message.type) {
+    case 'init':
+      if (view && sync) {
+        // The host restarted the session: adopt its text without rebuilding the editor.
+        sync.applySync(view, message.text, message.epoch);
+        applyConfig(message.config);
+      } else {
+        createEditor(message);
+      }
+      break;
+    case 'patch':
+      if (view && sync) sync.applyPatch(view, message.from, message.to, message.insert, message.epoch, message.reason);
+      break;
+    case 'sync':
+      if (view && sync) sync.applySync(view, message.text, message.epoch);
+      break;
+    case 'config':
+      applyConfig(message.config);
+      break;
+    case 'command':
+      runCommand(message.id, message.arg);
+      break;
+    case 'flush':
+      sync?.flush();
+      host.post({ type: 'flushed', reqId: message.reqId });
+      break;
+    case 'debugRequest':
+      host.post({
+        type: 'debugState',
+        reqId: message.reqId,
+        text: view?.state.doc.toString() ?? '',
+        mode: view?.state.field(modeField) ?? 'raw',
+        epoch: sync?.epoch ?? -1,
+        problems: [...problems],
+      });
+      break;
+  }
+});
+
+const reportFocus = () => host.post({ type: 'focus', focused: document.hasFocus() });
+window.addEventListener('focus', reportFocus);
+window.addEventListener('blur', () => {
+  // Hand over anything still unsent before another part of VS Code takes over.
+  sync?.flush();
+  reportFocus();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) sync?.flush();
+});
+
+host.post({ type: 'ready' });
+reportFocus();
+
+// For the browser harness and automated checks.
+(window as unknown as { __mdl?: unknown }).__mdl = {
+  get view() {
+    return view;
+  },
+  runCommand,
+  flush: () => sync?.flush(),
+};
