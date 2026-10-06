@@ -4,7 +4,7 @@ import { extractHeadings } from '../shared/textUtil';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 
-/** Command name (after "markdownLive.") → what the webview is asked to do. */
+/** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
   toggleBold: ['bold'],
   toggleItalic: ['italic'],
@@ -43,7 +43,7 @@ function activeMarkdownUri(): vscode.Uri | undefined {
 export function activate(context: vscode.ExtensionContext): unknown {
   const provider = new MarkdownEditorProvider(context);
   const register = (name: string, run: (...args: any[]) => unknown) =>
-    context.subscriptions.push(vscode.commands.registerCommand(`markdownLive.${name}`, run));
+    context.subscriptions.push(vscode.commands.registerCommand(`seamlessMarkdown.${name}`, run));
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
@@ -126,7 +126,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
 
   register('setAsDefault', async () => {
     await provider.setDefault(true);
-    void vscode.window.showInformationMessage('Markdown files now open with Markdown Live Editor.');
+    void vscode.window.showInformationMessage('Markdown files now open with Seamless Markdown.');
   });
   register('unsetAsDefault', async () => {
     await provider.setDefault(false);
@@ -135,10 +135,10 @@ export function activate(context: vscode.ExtensionContext): unknown {
 
   /* ---------- status bar ---------- */
   const modeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  modeItem.command = 'markdownLive.pickMode';
-  modeItem.name = 'Markdown Live: Mode';
+  modeItem.command = 'seamlessMarkdown.pickMode';
+  modeItem.name = 'Seamless Markdown: Mode';
   const countItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  countItem.name = 'Markdown Live: Word Count';
+  countItem.name = 'Seamless Markdown: Word Count';
   context.subscriptions.push(modeItem, countItem);
 
   const refresh = () => {
@@ -149,7 +149,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
       return;
     }
     modeItem.text = `$(markdown) ${MODE_LABELS[session.mode]}`;
-    modeItem.tooltip = 'Markdown Live Editor mode. Click to change.';
+    modeItem.tooltip = 'Seamless Markdown mode. Click to change.';
     modeItem.show();
     const { words, chars, selWords } = session.stats;
     const minutes = Math.max(1, Math.round(words / 230));
@@ -172,7 +172,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
       }
       await new Promise((r) => setTimeout(r, 50));
     }
-    throw new Error(`No Markdown Live editor is open for ${uri.toString()}`);
+    throw new Error(`No Seamless Markdown editor is open for ${uri.toString()}`);
   };
   return {
     sessionCount: (uri: vscode.Uri) => provider.sessionsFor(uri).length,

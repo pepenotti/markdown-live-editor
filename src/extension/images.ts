@@ -34,7 +34,7 @@ function linked(document: vscode.TextDocument, target: vscode.Uri): LinkedFile {
 }
 
 function imageFolder(document: vscode.TextDocument): vscode.Uri {
-  const setting = vscode.workspace.getConfiguration('markdownLive', document.uri).get<string>('imageFolder', 'assets');
+  const setting = vscode.workspace.getConfiguration('seamlessMarkdown', document.uri).get<string>('imageFolder', 'assets');
   const stem = baseName(document.uri).replace(/\.[^.]+$/, '');
   const folder = setting
     .replace(/\$\{fileBasenameNoExtension\}/g, stem)

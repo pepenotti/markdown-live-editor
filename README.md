@@ -1,4 +1,4 @@
-# Markdown Live Editor
+# Seamless Markdown
 
 A Markdown editor for VS Code that removes the need for a separate preview. You edit one document and choose how much of the syntax you want to see.
 
@@ -17,11 +17,11 @@ The file on disk is always plain Markdown. The editor never rewrites text you di
 1. Install the packaged extension:
 
    ```bash
-   code --install-extension markdown-live-editor-0.1.0.vsix
+   code --install-extension seamless-markdown-0.1.0.vsix
    ```
 
-2. Open a Markdown file, then click the preview icon in the editor title bar, or run **Markdown Live: Open with Markdown Live Editor** from the Command Palette.
-3. To use it for every Markdown file, run **Markdown Live: Use as Default Editor for Markdown**. **Markdown Live: Stop Using as Default Editor** reverts this.
+2. Open a Markdown file, then click the preview icon in the editor title bar, or run **Seamless Markdown: Open with Seamless Markdown** from the Command Palette.
+3. To use it for every Markdown file, run **Seamless Markdown: Use as Default Editor for Markdown**. **Seamless Markdown: Stop Using as Default Editor** reverts this.
 
 The extension never becomes the default by itself, and it is not used in diff views.
 
@@ -72,15 +72,15 @@ code --extensionDevelopmentPath="$PWD" sample
 
 | Setting | Default | Meaning |
 | :------ | :------ | :------ |
-| `markdownLive.defaultMode` | `half` | Mode for files that have no remembered mode |
-| `markdownLive.rememberModePerFile` | `true` | Reopen each file in the mode it was last used in |
-| `markdownLive.lineWidth` | `860` | Maximum text width in the preview modes, in pixels. `0` uses the full width |
-| `markdownLive.fontSize` | `15` | Font size of the preview modes |
-| `markdownLive.fontFamily` | empty | Font of the preview modes. Empty uses the VS Code interface font |
-| `markdownLive.showToolbar` | `true` | Show the toolbar |
-| `markdownLive.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
-| `markdownLive.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
-| `markdownLive.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
+| `seamlessMarkdown.defaultMode` | `half` | Mode for files that have no remembered mode |
+| `seamlessMarkdown.rememberModePerFile` | `true` | Reopen each file in the mode it was last used in |
+| `seamlessMarkdown.lineWidth` | `860` | Maximum text width in the preview modes, in pixels. `0` uses the full width |
+| `seamlessMarkdown.fontSize` | `15` | Font size of the preview modes |
+| `seamlessMarkdown.fontFamily` | empty | Font of the preview modes. Empty uses the VS Code interface font |
+| `seamlessMarkdown.showToolbar` | `true` | Show the toolbar |
+| `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
+| `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
+| `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations
 

@@ -26,7 +26,7 @@ export interface Stats {
 type DebugState = Extract<WebviewMessage, { type: 'debugState' }>;
 
 function readConfig(resource: vscode.Uri): EditorConfig {
-  const c = vscode.workspace.getConfiguration('markdownLive', resource);
+  const c = vscode.workspace.getConfiguration('seamlessMarkdown', resource);
   const mode = c.get<string>('defaultMode', 'half');
   return {
     defaultMode: (MODES as readonly string[]).includes(mode) ? (mode as Mode) : 'half',
@@ -75,7 +75,7 @@ export class Session implements SyncTarget {
         this.sync.documentChanged(reason);
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('markdownLive', document.uri)) this.post({ type: 'config', config: readConfig(document.uri) });
+        if (e.affectsConfiguration('seamlessMarkdown', document.uri)) this.post({ type: 'config', config: readConfig(document.uri) });
       }),
     );
   }
@@ -196,7 +196,7 @@ export class Session implements SyncTarget {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.post({ type: 'response', reqId, ok: false, error: message });
-      void vscode.window.showWarningMessage(`Markdown Live Editor: ${message}`);
+      void vscode.window.showWarningMessage(`Seamless Markdown: ${message}`);
     }
   }
 
@@ -266,7 +266,7 @@ export class Session implements SyncTarget {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="mdl-nonce" content="${nonce}">
 <link rel="stylesheet" href="${style}">
-<title>Markdown Live Editor</title>
+<title>Seamless Markdown</title>
 </head>
 <body>
 <div id="app"></div>
@@ -287,7 +287,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly changed = new vscode.EventEmitter<void>();
   /** Fires when the active session, its mode, focus or statistics change. */
   readonly onDidChange = this.changed.event;
-  private readonly channel = vscode.window.createOutputChannel('Markdown Live Editor');
+  private readonly channel = vscode.window.createOutputChannel('Seamless Markdown');
 
   constructor(readonly context: vscode.ExtensionContext) {
     context.subscriptions.push(this.changed, this.channel);
@@ -322,7 +322,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   sessionChanged(): void {
     const active = this.active;
-    void vscode.commands.executeCommand('setContext', 'markdownLive.focus', !!active?.focused);
+    void vscode.commands.executeCommand('setContext', 'seamlessMarkdown.focus', !!active?.focused);
     this.changed.fire();
   }
 
@@ -333,7 +333,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   initialMode(document: vscode.TextDocument): Mode {
-    const config = vscode.workspace.getConfiguration('markdownLive', document.uri);
+    const config = vscode.workspace.getConfiguration('seamlessMarkdown', document.uri);
     const fallback = readConfig(document.uri).defaultMode;
     if (!config.get<boolean>('rememberModePerFile', true)) return fallback;
     const saved = this.context.workspaceState.get<string>(this.modeKey(document));
@@ -353,7 +353,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
       if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
         await vscode.env.openExternal(vscode.Uri.parse(href, true));
       } else {
-        void vscode.window.showWarningMessage(`Markdown Live Editor does not open "${scheme}:" links.`);
+        void vscode.window.showWarningMessage(`Seamless Markdown does not open "${scheme}:" links.`);
       }
       return;
     }
@@ -409,11 +409,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     const key = 'askedAboutDefault';
     if (this.context.extensionMode === vscode.ExtensionMode.Test) return;
     if (this.context.globalState.get<boolean>(key) || this.isDefault()) return;
-    if (!vscode.workspace.getConfiguration('markdownLive').get<boolean>('promptToSetDefault', true)) return;
+    if (!vscode.workspace.getConfiguration('seamlessMarkdown').get<boolean>('promptToSetDefault', true)) return;
     await this.context.globalState.update(key, true);
     const yes = 'Use as default';
     const choice = await vscode.window.showInformationMessage(
-      'Open Markdown files with Markdown Live Editor by default? You can change this later with "Markdown Live: Stop Using as Default Editor".',
+      'Open Markdown files with Seamless Markdown by default? You can change this later with "Seamless Markdown: Stop Using as Default Editor".',
       yes,
       'Not now',
     );

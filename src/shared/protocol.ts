@@ -8,7 +8,7 @@ export const MODE_LABELS: Record<Mode, string> = {
   full: 'Full preview',
 };
 
-export const VIEW_TYPE = 'markdownLive.editor';
+export const VIEW_TYPE = 'seamlessMarkdown.editor';
 
 export interface EditorConfig {
   defaultMode: Mode;

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vscode = require('vscode');
 
-const VIEW_TYPE = 'markdownLive.editor';
+const VIEW_TYPE = 'seamlessMarkdown.editor';
 const SAMPLE = path.resolve(__dirname, '../../sample');
 const lf = (s) => s.replace(/\r\n/g, '\n');
 
@@ -39,9 +39,9 @@ async function inStep(uri, document) {
   }, 'the webview to match the document');
 }
 
-suite('Markdown Live Editor', () => {
+suite('Seamless Markdown', () => {
   suiteSetup(async () => {
-    const extension = vscode.extensions.all.find((e) => e.packageJSON.name === 'markdown-live-editor');
+    const extension = vscode.extensions.all.find((e) => e.packageJSON.name === 'seamless-markdown');
     assert.ok(extension, 'extension is installed in the test host');
     api = await extension.activate();
     assert.ok(api, 'test hooks are available');
@@ -86,11 +86,11 @@ suite('Markdown Live Editor', () => {
     assert.strictEqual(document.isDirty, true);
     await inStep(uri, document);
 
-    await vscode.commands.executeCommand('markdownLive.undo');
+    await vscode.commands.executeCommand('seamlessMarkdown.undo');
     await until(() => document.getText() === original, 'undo to restore the document');
     await inStep(uri, document);
 
-    await vscode.commands.executeCommand('markdownLive.redo');
+    await vscode.commands.executeCommand('seamlessMarkdown.redo');
     await until(() => document.getText() === '## ' + original, 'redo to reapply the heading');
     const state = await inStep(uri, document);
     assert.deepStrictEqual(state.problems, []);
@@ -196,11 +196,11 @@ suite('Markdown Live Editor', () => {
 
   test('can hand the file back to the plain text editor', async () => {
     const { uri } = await open('plain.md');
-    await vscode.commands.executeCommand('markdownLive.openSource');
+    await vscode.commands.executeCommand('seamlessMarkdown.openSource');
     await until(() => vscode.window.activeTextEditor?.document.uri.toString() === uri.toString(), 'the text editor');
     await until(() => api.sessionCount(uri) === 0, 'the custom editor to close');
     // And back again, replacing the text editor tab.
-    await vscode.commands.executeCommand('markdownLive.openWith', uri);
+    await vscode.commands.executeCommand('seamlessMarkdown.openWith', uri);
     await until(() => api.sessionCount(uri) === 1, 'the custom editor to open');
     const tabs = vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((t) => t.input && t.input.uri && t.input.uri.toString() === uri.toString());
     assert.strictEqual(tabs.length, 1, 'only one tab remains for the file');
@@ -211,12 +211,12 @@ suite('Markdown Live Editor', () => {
     const associations = () => vscode.workspace.getConfiguration('workbench').get('editorAssociations') || {};
     assert.notStrictEqual(associations()['*.md'], VIEW_TYPE);
     try {
-      await vscode.commands.executeCommand('markdownLive.setAsDefault');
+      await vscode.commands.executeCommand('seamlessMarkdown.setAsDefault');
       await until(() => associations()['*.md'] === VIEW_TYPE, 'the association to be written');
       await vscode.commands.executeCommand('vscode.open', uri);
       await until(() => api.sessionCount(uri) === 1, 'the file to open in the custom editor');
     } finally {
-      await vscode.commands.executeCommand('markdownLive.unsetAsDefault');
+      await vscode.commands.executeCommand('seamlessMarkdown.unsetAsDefault');
     }
     await until(() => associations()['*.md'] !== VIEW_TYPE, 'the association to be removed');
   });

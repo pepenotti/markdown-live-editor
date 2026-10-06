@@ -1,6 +1,6 @@
 {
-  "name": "markdown-live-editor",
-  "displayName": "Markdown Live Editor",
+  "name": "seamless-markdown",
+  "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
   "version": "0.1.0",
   "publisher": "pepenotti",
@@ -62,8 +62,8 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "markdownLive.editor",
-        "displayName": "Markdown Live Editor",
+        "viewType": "seamlessMarkdown.editor",
+        "displayName": "Seamless Markdown",
         "selector": [
           {
             "filenamePattern": "*.{md,markdown,mdown,mkd}"
@@ -74,429 +74,429 @@
     ],
     "commands": [
       {
-        "command": "markdownLive.openWith",
-        "title": "Open with Markdown Live Editor",
-        "category": "Markdown Live",
+        "command": "seamlessMarkdown.openWith",
+        "title": "Open with Seamless Markdown",
+        "category": "Seamless Markdown",
         "icon": "$(open-preview)"
       },
       {
-        "command": "markdownLive.openSource",
+        "command": "seamlessMarkdown.openSource",
         "title": "Open as Plain Text",
-        "category": "Markdown Live",
+        "category": "Seamless Markdown",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "markdownLive.setAsDefault",
+        "command": "seamlessMarkdown.setAsDefault",
         "title": "Use as Default Editor for Markdown",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.unsetAsDefault",
+        "command": "seamlessMarkdown.unsetAsDefault",
         "title": "Stop Using as Default Editor",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.pickMode",
+        "command": "seamlessMarkdown.pickMode",
         "title": "Choose Mode\u2026",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.cycleMode",
+        "command": "seamlessMarkdown.cycleMode",
         "title": "Switch to Next Mode",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.rawMode",
+        "command": "seamlessMarkdown.rawMode",
         "title": "Raw Mode",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.halfPreviewMode",
+        "command": "seamlessMarkdown.halfPreviewMode",
         "title": "Half Preview Mode",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.fullPreviewMode",
+        "command": "seamlessMarkdown.fullPreviewMode",
         "title": "Full Preview Mode",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleBold",
+        "command": "seamlessMarkdown.toggleBold",
         "title": "Toggle Bold",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleItalic",
+        "command": "seamlessMarkdown.toggleItalic",
         "title": "Toggle Italic",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleStrikethrough",
+        "command": "seamlessMarkdown.toggleStrikethrough",
         "title": "Toggle Strikethrough",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleInlineCode",
+        "command": "seamlessMarkdown.toggleInlineCode",
         "title": "Toggle Inline Code",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.insertLink",
+        "command": "seamlessMarkdown.insertLink",
         "title": "Insert or Edit Link",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.insertImage",
+        "command": "seamlessMarkdown.insertImage",
         "title": "Insert Image\u2026",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.insertTable",
+        "command": "seamlessMarkdown.insertTable",
         "title": "Insert Table",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.insertCodeBlock",
+        "command": "seamlessMarkdown.insertCodeBlock",
         "title": "Insert Code Block",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.insertRule",
+        "command": "seamlessMarkdown.insertRule",
         "title": "Insert Horizontal Rule",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleBulletList",
+        "command": "seamlessMarkdown.toggleBulletList",
         "title": "Toggle Bullet List",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleNumberedList",
+        "command": "seamlessMarkdown.toggleNumberedList",
         "title": "Toggle Numbered List",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleTaskList",
+        "command": "seamlessMarkdown.toggleTaskList",
         "title": "Toggle Task List",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleTask",
+        "command": "seamlessMarkdown.toggleTask",
         "title": "Tick or Untick Task",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.toggleQuote",
+        "command": "seamlessMarkdown.toggleQuote",
         "title": "Toggle Quote",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.heading1",
+        "command": "seamlessMarkdown.heading1",
         "title": "Heading 1",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.heading2",
+        "command": "seamlessMarkdown.heading2",
         "title": "Heading 2",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.heading3",
+        "command": "seamlessMarkdown.heading3",
         "title": "Heading 3",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.headingIncrease",
+        "command": "seamlessMarkdown.headingIncrease",
         "title": "Increase Heading Level",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.headingDecrease",
+        "command": "seamlessMarkdown.headingDecrease",
         "title": "Decrease Heading Level",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.goToHeading",
+        "command": "seamlessMarkdown.goToHeading",
         "title": "Go to Heading\u2026",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.find",
+        "command": "seamlessMarkdown.find",
         "title": "Find and Replace",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.undo",
+        "command": "seamlessMarkdown.undo",
         "title": "Undo",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.redo",
+        "command": "seamlessMarkdown.redo",
         "title": "Redo",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       },
       {
-        "command": "markdownLive.save",
+        "command": "seamlessMarkdown.save",
         "title": "Save",
-        "category": "Markdown Live"
+        "category": "Seamless Markdown"
       }
     ],
     "keybindings": [
       {
-        "command": "markdownLive.toggleBold",
+        "command": "seamlessMarkdown.toggleBold",
         "key": "ctrl+b",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+b"
       },
       {
-        "command": "markdownLive.toggleItalic",
+        "command": "seamlessMarkdown.toggleItalic",
         "key": "ctrl+i",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+i"
       },
       {
-        "command": "markdownLive.toggleStrikethrough",
+        "command": "seamlessMarkdown.toggleStrikethrough",
         "key": "alt+shift+5",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
-        "command": "markdownLive.toggleInlineCode",
+        "command": "seamlessMarkdown.toggleInlineCode",
         "key": "ctrl+e",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+e"
       },
       {
-        "command": "markdownLive.insertLink",
+        "command": "seamlessMarkdown.insertLink",
         "key": "ctrl+l",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+l"
       },
       {
-        "command": "markdownLive.toggleBulletList",
+        "command": "seamlessMarkdown.toggleBulletList",
         "key": "ctrl+shift+8",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+8"
       },
       {
-        "command": "markdownLive.toggleNumberedList",
+        "command": "seamlessMarkdown.toggleNumberedList",
         "key": "ctrl+shift+7",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+7"
       },
       {
-        "command": "markdownLive.toggleQuote",
+        "command": "seamlessMarkdown.toggleQuote",
         "key": "ctrl+shift+9",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+9"
       },
       {
-        "command": "markdownLive.toggleTask",
+        "command": "seamlessMarkdown.toggleTask",
         "key": "alt+c",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
-        "command": "markdownLive.headingIncrease",
+        "command": "seamlessMarkdown.headingIncrease",
         "key": "ctrl+shift+]",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
-        "command": "markdownLive.headingDecrease",
+        "command": "seamlessMarkdown.headingDecrease",
         "key": "ctrl+shift+[",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
-        "command": "markdownLive.cycleMode",
+        "command": "seamlessMarkdown.cycleMode",
         "key": "alt+m",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
-        "command": "markdownLive.find",
+        "command": "seamlessMarkdown.find",
         "key": "ctrl+f",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+f"
       },
       {
-        "command": "markdownLive.goToHeading",
+        "command": "seamlessMarkdown.goToHeading",
         "key": "ctrl+shift+o",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+o"
       },
       {
-        "command": "markdownLive.undo",
+        "command": "seamlessMarkdown.undo",
         "key": "ctrl+z",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+z"
       },
       {
-        "command": "markdownLive.redo",
+        "command": "seamlessMarkdown.redo",
         "key": "ctrl+y",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+z"
       },
       {
-        "command": "markdownLive.redo",
+        "command": "seamlessMarkdown.redo",
         "key": "ctrl+shift+z",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+shift+z"
       },
       {
-        "command": "markdownLive.save",
+        "command": "seamlessMarkdown.save",
         "key": "ctrl+s",
-        "when": "activeCustomEditorId == 'markdownLive.editor' && markdownLive.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
         "mac": "cmd+s"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "markdownLive.openWith",
+          "command": "seamlessMarkdown.openWith",
           "when": "resourceLangId == markdown && !activeCustomEditorId"
         },
         {
-          "command": "markdownLive.openSource",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.openSource",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.pickMode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.pickMode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.cycleMode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.cycleMode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.rawMode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.rawMode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.halfPreviewMode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.halfPreviewMode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.fullPreviewMode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.fullPreviewMode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleBold",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleBold",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleItalic",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleItalic",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleStrikethrough",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleStrikethrough",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleInlineCode",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleInlineCode",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.insertLink",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.insertLink",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.insertImage",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.insertImage",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.insertTable",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.insertTable",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.insertCodeBlock",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.insertCodeBlock",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.insertRule",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.insertRule",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleBulletList",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleBulletList",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleNumberedList",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleNumberedList",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleTaskList",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleTaskList",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleTask",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleTask",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.toggleQuote",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.toggleQuote",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.heading1",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.heading1",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.heading2",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.heading2",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.heading3",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.heading3",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.headingIncrease",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.headingIncrease",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.headingDecrease",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.headingDecrease",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.goToHeading",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.goToHeading",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.find",
-          "when": "activeCustomEditorId == 'markdownLive.editor'"
+          "command": "seamlessMarkdown.find",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
-          "command": "markdownLive.undo",
+          "command": "seamlessMarkdown.undo",
           "when": "false"
         },
         {
-          "command": "markdownLive.redo",
+          "command": "seamlessMarkdown.redo",
           "when": "false"
         },
         {
-          "command": "markdownLive.save",
+          "command": "seamlessMarkdown.save",
           "when": "false"
         }
       ],
       "editor/title": [
         {
-          "command": "markdownLive.openWith",
+          "command": "seamlessMarkdown.openWith",
           "when": "resourceLangId == markdown && !activeCustomEditorId && !isInDiffEditor",
           "group": "navigation"
         },
         {
-          "command": "markdownLive.openSource",
-          "when": "activeCustomEditorId == 'markdownLive.editor'",
+          "command": "seamlessMarkdown.openSource",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "markdownLive.openWith",
+          "command": "seamlessMarkdown.openWith",
           "when": "resourceLangId == markdown",
           "group": "navigation@90"
         }
       ]
     },
     "configuration": {
-      "title": "Markdown Live Editor",
+      "title": "Seamless Markdown",
       "properties": {
-        "markdownLive.defaultMode": {
+        "seamlessMarkdown.defaultMode": {
           "type": "string",
           "enum": [
             "raw",
@@ -511,45 +511,45 @@
           "default": "half",
           "description": "Mode a Markdown file opens in when no mode has been remembered for it."
         },
-        "markdownLive.rememberModePerFile": {
+        "seamlessMarkdown.rememberModePerFile": {
           "type": "boolean",
           "default": true,
           "description": "Reopen each file in the mode it was last used in."
         },
-        "markdownLive.lineWidth": {
+        "seamlessMarkdown.lineWidth": {
           "type": "number",
           "default": 860,
           "minimum": 0,
           "description": "Maximum width of the text column in the preview modes, in pixels. 0 uses the full width."
         },
-        "markdownLive.fontSize": {
+        "seamlessMarkdown.fontSize": {
           "type": "number",
           "default": 15,
           "minimum": 8,
           "maximum": 40,
           "description": "Font size of the preview modes, in pixels. Raw mode uses the editor font size."
         },
-        "markdownLive.fontFamily": {
+        "seamlessMarkdown.fontFamily": {
           "type": "string",
           "default": "",
           "description": "Font family of the preview modes. Empty uses the VS Code interface font."
         },
-        "markdownLive.showToolbar": {
+        "seamlessMarkdown.showToolbar": {
           "type": "boolean",
           "default": true,
           "description": "Show the formatting toolbar above the document."
         },
-        "markdownLive.imageFolder": {
+        "seamlessMarkdown.imageFolder": {
           "type": "string",
           "default": "assets",
           "markdownDescription": "Folder for pasted and dropped images, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name without its extension."
         },
-        "markdownLive.tableAutoAlign": {
+        "seamlessMarkdown.tableAutoAlign": {
           "type": "boolean",
           "default": true,
           "description": "Re-align the pipes of a table in the source whenever one of its cells is edited. When off, only the edited cell changes."
         },
-        "markdownLive.promptToSetDefault": {
+        "seamlessMarkdown.promptToSetDefault": {
           "type": "boolean",
           "default": true,
           "description": "Ask once whether Markdown files should open with this editor by default."

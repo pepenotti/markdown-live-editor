@@ -3,7 +3,7 @@ title: Feature tour
 tags: [sample, markdown]
 ---
 
-# Markdown Live Editor
+# Seamless Markdown
 
 This file shows everything the editor renders. Switch between **Raw**, **Half preview** and **Full preview** with the buttons on the right or `Alt+M`.
 

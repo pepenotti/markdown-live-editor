@@ -1,4 +1,4 @@
-/* Markdown Live Editor. Colours come from the VS Code theme, with fallbacks for the browser harness. */
+/* Seamless Markdown. Colours come from the VS Code theme, with fallbacks for the browser harness. */
 body {
   --mdl-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif);
   --mdl-mono: var(--vscode-editor-font-family, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
