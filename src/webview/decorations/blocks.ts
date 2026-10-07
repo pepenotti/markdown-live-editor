@@ -6,9 +6,12 @@ import { type EditorState, type Range, RangeSet, RangeValue, StateField, type Te
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { modeField, refreshDecorations, revealBlock } from '../modes';
+import { texOf } from '../markdown';
+import { MathWidget, MermaidWidget } from '../widgets/rendered';
 import { TableWidget } from '../widgets/table';
 
-export type ProtectedKind = 'table' | 'frontmatter' | 'fence-open' | 'fence-close';
+/** rendered: a diagram or math block drawn in place of its source. */
+export type ProtectedKind = 'table' | 'frontmatter' | 'rendered' | 'fence-open' | 'fence-close';
 
 /** Whole source lines that are drawn as a widget and must stay intact. */
 export class Protected extends RangeValue {
@@ -83,12 +86,25 @@ function wholeLines(doc: Text, from: number, to: number): boolean {
   return doc.lineAt(from).from === from && doc.lineAt(to).to === to;
 }
 
-/** The table or front matter block that contains `pos`, if any. */
+/** The source of a fenced code block when it is a closed Mermaid diagram, else null. */
+function mermaidSource(state: EditorState, node: SyntaxNode): string | null {
+  const info = node.getChild('CodeInfo');
+  if (!info || state.doc.sliceString(info.from, info.to).trim().split(/\s+/)[0].toLowerCase() !== 'mermaid') return null;
+  const marks = node.getChildren('CodeMark');
+  const first = state.doc.lineAt(node.from);
+  const last = state.doc.lineAt(node.to);
+  if (marks.length < 2 || last.number === first.number || marks[marks.length - 1].from < last.from) return null;
+  const body = node.getChild('CodeText');
+  return body ? state.doc.sliceString(body.from, body.to) : '';
+}
+
+/** The block containing `pos` that is drawn in place of its source, if any. */
 function revealableAt(state: EditorState, pos: number): SyntaxNode | null {
   if (pos > state.doc.length) return null;
   for (const side of [1, -1] as const) {
     for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, side); n; n = n.parent) {
-      if (n.name === 'Table' || n.name === 'FrontMatter') return n;
+      if (n.name === 'Table' || n.name === 'FrontMatter' || n.name === 'BlockMath') return n;
+      if (n.name === 'FencedCode' && mermaidSource(state, n) !== null) return n;
     }
   }
   return null;
@@ -124,7 +140,28 @@ function build(state: EditorState, reveal: number | null): BlockState {
           prot.push(new Protected('frontmatter', 0, 0).range(node.from, node.to));
           return false;
         }
+        case 'BlockMath': {
+          if (!wholeLines(doc, node.from, node.to)) return false;
+          const tex = texOf(doc.sliceString(node.from, node.to));
+          if (revealed(node.from, node.to)) {
+            // While the source is being edited, the result is shown under it.
+            decos.push(Decoration.widget({ widget: new MathWidget(tex, true), block: true, side: 1 }).range(node.to));
+          } else {
+            decos.push(Decoration.replace({ widget: new MathWidget(tex, true, true), block: true }).range(node.from, node.to));
+            prot.push(new Protected('rendered', 0, 0).range(node.from, node.to));
+          }
+          return false;
+        }
         case 'FencedCode': {
+          const diagram = wholeLines(doc, node.from, node.to) ? mermaidSource(state, node.node) : null;
+          if (diagram !== null) {
+            if (!revealed(node.from, node.to)) {
+              decos.push(Decoration.replace({ widget: new MermaidWidget(diagram, true), block: true }).range(node.from, node.to));
+              prot.push(new Protected('rendered', 0, 0).range(node.from, node.to));
+              return false;
+            }
+            decos.push(Decoration.widget({ widget: new MermaidWidget(diagram, false), block: true, side: 1 }).range(node.to));
+          }
           if (!full) return false;
           const first = doc.lineAt(node.from);
           const last = doc.lineAt(node.to);

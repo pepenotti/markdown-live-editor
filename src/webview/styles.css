@@ -1,3 +1,5 @@
+@import 'katex/dist/katex.min.css';
+
 /* Seamless Markdown. Colours come from the VS Code theme, with fallbacks for the browser harness. */
 body {
   --mdl-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif);
@@ -788,4 +790,45 @@ body {
 #app .cm-md-table-tools button.cm-md-table-danger {
   padding: 0 6px;
   color: var(--vscode-errorForeground, #cf222e);
+}
+
+/* ---------- math and diagrams ---------- */
+#app .cm-md-math {
+  text-indent: 0;
+}
+#app .cm-md-math .katex {
+  font-size: 1.1em;
+}
+#app .cm-md-math-block {
+  padding: 8px var(--mdl-line-pad);
+  text-align: center;
+  overflow-x: auto;
+  cursor: pointer;
+}
+#app .cm-md-math-source,
+#app .cm-md-math-lines {
+  font-family: var(--mdl-mono);
+  font-size: 0.88em;
+}
+#app .cm-md-mermaid {
+  padding: 8px var(--mdl-line-pad);
+  text-align: center;
+  overflow-x: auto;
+  color: var(--mdl-dim);
+  font-family: var(--mdl-font);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+#app .cm-md-mermaid[title] {
+  cursor: pointer;
+}
+#app .cm-md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+#app .cm-md-mermaid[data-state='error'],
+#app .cm-md-render-error {
+  text-align: left;
+  color: var(--vscode-errorForeground, #cf222e);
+  font-family: var(--mdl-mono);
 }

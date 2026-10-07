@@ -221,6 +221,33 @@ suite('Seamless Markdown', () => {
     await until(() => associations()['*.md'] !== VIEW_TYPE, 'the association to be removed');
   });
 
+  test('draws math and Mermaid diagrams inside VS Code without policy errors', async () => {
+    const { uri, document } = await open('diagrams.md');
+    const state = await until(async () => {
+      const s = await api.state(uri);
+      return s && s.rendered.diagrams >= 1 && s.rendered.math >= 3 ? s : null;
+    }, 'the diagram and formulas to be drawn', 30000);
+    assert.strictEqual(state.rendered.diagramErrors, 0);
+    assert.deepStrictEqual(state.problems, []);
+    assert.strictEqual(document.isDirty, false);
+  });
+
+  test('copies the document as HTML', async () => {
+    await open('plain.md');
+    await vscode.env.clipboard.writeText('');
+    await vscode.commands.executeCommand('seamlessMarkdown.copyAsHtml');
+    const html = await until(() => vscode.env.clipboard.readText(), 'the clipboard to be filled');
+    assert.strictEqual(html, '<p>First line</p>\n<p>Second paragraph with a word.</p>\n');
+  });
+
+  test('builds the outline from the headings', async () => {
+    const { uri } = await open('features.md');
+    const outline = await api.outline(uri);
+    assert.strictEqual(outline.length, 1);
+    assert.strictEqual(outline[0].text, 'Seamless Markdown');
+    assert.ok(outline[0].children.some((c) => c.text === 'Tables'));
+  });
+
   test('is offered for Markdown files but does not take over as the default', async () => {
     const uri = vscode.Uri.file(path.join(dir, 'notes', 'other.md'));
     await vscode.commands.executeCommand('vscode.open', uri);

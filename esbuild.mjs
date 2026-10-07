@@ -35,12 +35,27 @@ const styles = {
   ...common,
   entryPoints: ['src/webview/styles.css'],
   outfile: 'dist/webview.css',
+  // KaTeX lists three formats per font; the webview only needs woff2.
+  loader: { '.woff2': 'file', '.woff': 'empty', '.ttf': 'empty' },
+  assetNames: 'fonts/[name]',
+};
+
+// The diagram library is large, so it is a separate file loaded on demand.
+const diagrams = {
+  ...common,
+  entryPoints: ['src/webview/mermaidBundle.ts'],
+  outfile: 'dist/mermaid.js',
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
+  sourcemap: false,
+  minify: true,
 };
 
 if (watch) {
-  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(webview), esbuild.context(styles)]);
+  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(webview), esbuild.context(styles), esbuild.context(diagrams)]);
   await Promise.all(contexts.map((c) => c.watch()));
   console.log('watching…');
 } else {
-  await Promise.all([esbuild.build(extension), esbuild.build(webview), esbuild.build(styles)]);
+  await Promise.all([esbuild.build(extension), esbuild.build(webview), esbuild.build(styles), esbuild.build(diagrams)]);
 }

@@ -4,7 +4,7 @@ import { EditorSelection, type Extension, findClusterBreak, Prec } from '@codemi
 import { type Command, EditorView, keymap } from '@codemirror/view';
 import { blockField, protectedAt } from './decorations/blocks';
 import { afterLeadingAtoms, lineAtoms } from './decorations/inline';
-import { cursorFix, modeField } from './modes';
+import { cursorFix, modeField, revealBlock } from './modes';
 import { focusTableAt } from './widgets/table';
 
 function singleCursor(view: EditorView): number | null {
@@ -69,6 +69,18 @@ function deleteVisible(dir: 1 | -1): Command {
   };
 }
 
+/** Moving the cursor into a diagram or math block with the keyboard shows its source. */
+function openRendered(view: EditorView, block: { from: number; to: number }, dir: 1 | -1): boolean {
+  const doc = view.state.doc;
+  const first = doc.lineAt(block.from);
+  const last = doc.lineAt(block.to);
+  let pos: number;
+  if (first.number === last.number) pos = Math.min(block.to, block.from + 2);
+  else pos = dir > 0 ? first.to + 1 : last.from - 1;
+  view.dispatch({ effects: revealBlock.of(block.from), selection: EditorSelection.cursor(pos), scrollIntoView: true, userEvent: 'select' });
+  return true;
+}
+
 /** Arrow up/down next to a rendered table moves into its cells. */
 function enterTable(dir: 1 | -1): Command {
   return (view) => {
@@ -89,6 +101,7 @@ function enterTable(dir: 1 | -1): Command {
     if (target < 1 || target > state.doc.lines) return false;
     const neighbour = state.doc.line(target);
     const table = protectedAt(state, neighbour.from);
+    if (table?.value.kind === 'rendered') return openRendered(view, table, dir);
     if (table?.value.kind !== 'table') return false;
     return focusTableAt(view, table.from, dir > 0 ? 'first' : 'last');
   };
@@ -127,7 +140,7 @@ const keepCursorSensible = EditorView.updateListener.of((update) => {
       const after = p.to < state.doc.length ? p.to + 1 : -1;
       const before = p.from > 0 ? p.from - 1 : -1;
       const kind = p.value.kind;
-      if (kind === 'table' || kind === 'frontmatter') {
+      if (kind === 'table' || kind === 'frontmatter' || kind === 'rendered') {
         const next = forward ? (after >= 0 ? after : before) : before >= 0 ? before : after;
         if (next >= 0) pos = next;
       } else if (forward) {
@@ -159,6 +172,7 @@ function stepIntoTable(dir: 1 | -1): Command {
     if (dir > 0 ? head !== line.to || line.number >= state.doc.lines : head !== line.from || line.number <= 1) return false;
     const neighbour = state.doc.line(line.number + dir);
     const table = protectedAt(state, neighbour.from);
+    if (table?.value.kind === 'rendered') return openRendered(view, table, dir);
     if (table?.value.kind !== 'table') return false;
     return focusTableAt(view, table.from, dir > 0 ? 'first' : 'lastCell');
   };

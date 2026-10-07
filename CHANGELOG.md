@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Math: inline `$…$` and `$$` blocks, drawn with KaTeX.
+- Mermaid diagrams, drawn in place of their code block.
+- A Markdown Outline panel in the Explorer.
+- Copy as HTML, for the selection or the whole document.
+- A `seamlessMarkdown.customCss` setting.
+- The editor now allows inline styles in its content security policy, which KaTeX and Mermaid need. Scripts remain restricted.
+
 ## 0.1.1
 
 - Added an icon and screenshots to the listing.

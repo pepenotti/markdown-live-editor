@@ -2,9 +2,11 @@
 import type { SyntaxNode } from '@lezer/common';
 import { GFM, parser as baseParser } from '@lezer/markdown';
 import type { RenderConfig } from './config';
+import { math, texOf } from './markdown';
 import { escapeCell } from './table/model';
+import { renderMath } from './widgets/rendered';
 
-const parser = baseParser.configure([GFM]);
+const parser = baseParser.configure([GFM, math]);
 
 export function stripUrl(raw: string): string {
   const s = raw.trim();
@@ -90,6 +92,11 @@ function render(node: SyntaxNode, src: string, cfg: RenderConfig): Node[] {
       const a = el('span', [document.createTextNode(t)], 'cm-md-link');
       a.title = t;
       return [a];
+    }
+    case 'InlineMath': {
+      const span = el('span', [], 'cm-md-math');
+      renderMath(span, texOf(raw), raw.startsWith('$$'));
+      return [span];
     }
     case 'Escape':
       return [document.createTextNode(raw.slice(1))];

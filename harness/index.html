@@ -6,7 +6,7 @@
     <!-- Same policy shape as the real webview, so CSP problems show up here first. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; img-src 'self' https: data: blob:; style-src 'self' 'nonce-harness'; script-src 'self' 'nonce-harness'; connect-src 'self';"
+      content="default-src 'none'; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-harness'; font-src 'self'; connect-src 'self';"
     />
     <meta name="mdl-nonce" content="harness" />
     <title>Seamless Markdown harness</title>
@@ -132,6 +132,7 @@
                         fontFamily: '',
                         showToolbar: params.get('toolbar') !== '0',
                         tableAutoAlign: params.get('align') !== '0',
+                        customCss: params.get('css') || '',
                       },
                       baseUri: new URL('../sample', location.href).href,
                       rootUri: new URL('../sample', location.href).href,

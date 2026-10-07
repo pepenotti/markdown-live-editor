@@ -125,3 +125,20 @@ export function extractHeadings(text: string): Heading[] {
   }
   return out;
 }
+
+export interface OutlineNode extends Heading {
+  children: OutlineNode[];
+}
+
+/** Nests a flat list of headings by level. */
+export function buildOutline(headings: readonly Heading[]): OutlineNode[] {
+  const roots: OutlineNode[] = [];
+  const stack: OutlineNode[] = [];
+  for (const h of headings) {
+    const node: OutlineNode = { ...h, text: h.text.replace(/[*_`~]/g, '').trim() || '(empty heading)', children: [] };
+    while (stack.length && stack[stack.length - 1].level >= node.level) stack.pop();
+    (stack.length ? stack[stack.length - 1].children : roots).push(node);
+    stack.push(node);
+  }
+  return roots;
+}

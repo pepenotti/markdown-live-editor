@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -43,7 +43,8 @@
     "package": "npm run build -- --production && vsce package --no-dependencies",
     "screenshots": "node scripts/screenshots.mjs",
     "demo-gif": "node scripts/demo-gif.mjs",
-    "release:tag": "node scripts/tag-release.mjs"
+    "release:tag": "node scripts/tag-release.mjs",
+    "notices": "node scripts/notices.mjs"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -57,6 +58,7 @@
     "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.5",
     "@lezer/markdown": "^1.7.2",
+    "@types/markdown-it": "^14.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.4",
     "@types/vscode": "^1.90.0",
@@ -65,6 +67,9 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "gifenc": "^1.0.3",
+    "katex": "^0.19.0",
+    "markdown-it": "^15.0.2",
+    "mermaid": "^12.1.0",
     "pngjs": "^7.0.0",
     "puppeteer-core": "^25.12.0",
     "typescript": "^7.0.2",
@@ -249,6 +254,16 @@
       {
         "command": "seamlessMarkdown.save",
         "title": "Save",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.copyAsHtml",
+        "title": "Copy as HTML",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.revealLine",
+        "title": "Go to Line",
         "category": "Seamless Markdown"
       }
     ],
@@ -482,6 +497,14 @@
         {
           "command": "seamlessMarkdown.save",
           "when": "false"
+        },
+        {
+          "command": "seamlessMarkdown.copyAsHtml",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
+          "command": "seamlessMarkdown.revealLine",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -564,8 +587,25 @@
           "type": "boolean",
           "default": true,
           "description": "Ask once whether Markdown files should open with this editor by default."
+        },
+        "seamlessMarkdown.customCss": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "markdownDescription": "Extra CSS rules for the editor, for example `#app .cm-content { font-family: Georgia; }`."
         }
       }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "seamlessMarkdown.outline",
+          "name": "Markdown Outline",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Seamless Markdown"
+        }
+      ]
     }
   }
 }
