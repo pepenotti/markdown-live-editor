@@ -35,6 +35,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     fontFamily: c.get<string>('fontFamily', ''),
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
+    customCss: c.get<string>('customCss', ''),
   };
 }
 
@@ -141,6 +142,7 @@ export class Session implements SyncTarget {
         break;
       case 'flushed':
       case 'debugState':
+      case 'selectionState':
         this.waiters.get(message.reqId)?.(message);
         this.waiters.delete(message.reqId);
         break;
@@ -229,6 +231,13 @@ export class Session implements SyncTarget {
     return this.ask<DebugState>((reqId) => ({ type: 'debugRequest', reqId }), 3000);
   }
 
+  /** The Markdown the user has selected, or an empty string. */
+  async selectedText(): Promise<string> {
+    if (!this.ready) return '';
+    const reply = await this.ask<{ text: string }>((reqId) => ({ type: 'selectionRequest', reqId }), 1000);
+    return reply?.text ?? '';
+  }
+
   revealAnchor(anchor: string): void {
     if (this.ready) this.send('revealAnchor', anchor);
     else this.pendingAnchor = anchor;
@@ -254,7 +263,9 @@ export class Session implements SyncTarget {
     const csp = [
       `default-src 'none'`,
       `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} 'nonce-${nonce}'`,
+      // KaTeX and Mermaid put style attributes on what they draw. Scripts stay nonce-only,
+      // and document content is never inserted as HTML.
+      `style-src ${webview.cspSource} 'unsafe-inline'`,
       `script-src 'nonce-${nonce}'`,
       `font-src ${webview.cspSource}`,
     ].join('; ');

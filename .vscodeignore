@@ -8,3 +8,5 @@
 !THIRD-PARTY-NOTICES.md
 !CHANGELOG.md
 !images/icon.png
+!dist/mermaid.js
+!dist/fonts/*.woff2

@@ -73,7 +73,18 @@ try {
   await sleep(500);
   await page.screenshot({ path: 'images/full-preview-dark.png' });
 
-  console.log('wrote images/icon.png, modes.png, half-preview.png, table.png, full-preview-dark.png');
+  // Math and a Mermaid diagram; the cursor is inside the formula, so its source shows above the result
+  await page.setViewport({ width: 1100, height: 820, deviceScaleFactor: 2 });
+  await page.goto(`${BASE}/index.html?doc=diagrams.md&mode=half`);
+  await ready(page);
+  await page.waitForSelector('.cm-md-mermaid[data-state="done"] svg', { timeout: 20000 });
+  await page.click('.cm-md-math-block');
+  await sleep(500);
+  await page.screenshot({ path: 'images/diagrams.png' });
+  const problems = await page.evaluate(() => window.__harness.errors);
+  if (problems.length) throw new Error(`The editor reported problems: ${problems.join('; ')}`);
+
+  console.log('wrote images/icon.png, modes.png, half-preview.png, table.png, full-preview-dark.png, diagrams.png');
 } finally {
   await browser.close();
   server.kill();

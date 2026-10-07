@@ -1,9 +1,14 @@
 # Third-party notices
 
-The editor bundle (`dist/webview.js`) includes the packages below. Each is distributed under the licence shown; the full licence text ships with the package and is available at its repository.
+The shipped bundles in `dist/` include the packages below. Each is distributed under the licence shown; the full licence text ships with the package and is available at its repository.
 
 | Package | Version | Licence | Repository |
 | :------ | :------ | :------ | :--------- |
+| @braintree/sanitize-url | 7.1.2 | MIT | https://github.com/braintree/sanitize-url |
+| @chevrotain/cst-dts-gen | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
+| @chevrotain/gast | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
+| @chevrotain/regexp-to-ast | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
+| @chevrotain/utils | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
 | @codemirror/autocomplete | 6.20.3 | MIT | https://code.haverbeke.berlin/codemirror/autocomplete |
 | @codemirror/commands | 6.11.1 | MIT | https://code.haverbeke.berlin/codemirror/commands |
 | @codemirror/lang-angular | 0.1.4 | MIT | https://github.com/codemirror/lang-angular |
@@ -33,6 +38,7 @@ The editor bundle (`dist/webview.js`) includes the packages below. Each is distr
 | @codemirror/search | 6.7.2 | MIT | https://code.haverbeke.berlin/codemirror/search |
 | @codemirror/state | 6.7.6 | MIT | https://code.haverbeke.berlin/codemirror/state |
 | @codemirror/view | 6.43.13 | MIT | https://code.haverbeke.berlin/codemirror/view |
+| @iconify/utils | 3.1.7 | MIT | https://github.com/iconify/iconify |
 | @lezer/common | 1.5.3 | MIT | https://code.haverbeke.berlin/lezer/common |
 | @lezer/cpp | 1.1.6 | MIT | https://code.haverbeke.berlin/lezer/cpp |
 | @lezer/css | 1.3.8 | MIT | https://code.haverbeke.berlin/lezer/css |
@@ -51,6 +57,68 @@ The editor bundle (`dist/webview.js`) includes the packages below. Each is distr
 | @lezer/xml | 1.0.6 | MIT | https://github.com/lezer-parser/xml |
 | @lezer/yaml | 1.0.4 | MIT | https://github.com/lezer-parser/yaml |
 | @marijn/find-cluster-break | 1.0.4 | MIT | https://code.haverbeke.berlin/marijn/find-cluster-break |
+| @mermaid-js/parser | 2.0.1 | MIT | https://github.com/mermaid-js/mermaid |
+| @upsetjs/venn.js | 2.0.0 | MIT | https://github.com/upsetjs/venn.js |
+| chevrotain | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
+| cose-base | 1.0.3 | MIT | https://github.com/iVis-at-Bilkent/cose-base |
 | crelt | 1.0.7 | MIT | https://code.haverbeke.berlin/marijn/crelt |
+| cytoscape | 3.34.3 | MIT | https://github.com/cytoscape/cytoscape.js |
+| cytoscape-cose-bilkent | 4.1.0 | MIT | https://github.com/cytoscape/cytoscape.js-cose-bilkent |
+| cytoscape-fcose | 2.2.0 | MIT | https://github.com/iVis-at-Bilkent/cytoscape.js-fcose |
+| d3 | 7.9.0 | ISC | https://github.com/d3/d3 |
+| d3-array | 3.2.4 | ISC | https://github.com/d3/d3-array |
+| d3-axis | 3.0.0 | ISC | https://github.com/d3/d3-axis |
+| d3-brush | 3.0.0 | ISC | https://github.com/d3/d3-brush |
+| d3-chord | 3.0.1 | ISC | https://github.com/d3/d3-chord |
+| d3-color | 3.1.0 | ISC | https://github.com/d3/d3-color |
+| d3-contour | 4.0.2 | ISC | https://github.com/d3/d3-contour |
+| d3-delaunay | 6.0.4 | ISC | https://github.com/d3/d3-delaunay |
+| d3-dispatch | 3.0.1 | ISC | https://github.com/d3/d3-dispatch |
+| d3-drag | 3.0.0 | ISC | https://github.com/d3/d3-drag |
+| d3-dsv | 3.0.1 | ISC | https://github.com/d3/d3-dsv |
+| d3-ease | 3.0.1 | BSD-3-Clause | https://github.com/d3/d3-ease |
+| d3-fetch | 3.0.1 | ISC | https://github.com/d3/d3-fetch |
+| d3-force | 3.0.0 | ISC | https://github.com/d3/d3-force |
+| d3-format | 3.1.2 | ISC | https://github.com/d3/d3-format |
+| d3-geo | 3.1.1 | ISC | https://github.com/d3/d3-geo |
+| d3-hierarchy | 3.1.2 | ISC | https://github.com/d3/d3-hierarchy |
+| d3-interpolate | 3.0.1 | ISC | https://github.com/d3/d3-interpolate |
+| d3-path | 3.1.0 | ISC | https://github.com/d3/d3-path |
+| d3-polygon | 3.0.1 | ISC | https://github.com/d3/d3-polygon |
+| d3-quadtree | 3.0.1 | ISC | https://github.com/d3/d3-quadtree |
+| d3-random | 3.0.1 | ISC | https://github.com/d3/d3-random |
+| d3-sankey | 0.12.3 | BSD-3-Clause | https://github.com/d3/d3-sankey |
+| d3-scale | 4.0.2 | ISC | https://github.com/d3/d3-scale |
+| d3-scale-chromatic | 3.1.0 | ISC | https://github.com/d3/d3-scale-chromatic |
+| d3-selection | 3.0.0 | ISC | https://github.com/d3/d3-selection |
+| d3-shape | 3.2.0 | ISC | https://github.com/d3/d3-shape |
+| d3-time | 3.1.0 | ISC | https://github.com/d3/d3-time |
+| d3-time-format | 4.1.0 | ISC | https://github.com/d3/d3-time-format |
+| d3-timer | 3.0.1 | ISC | https://github.com/d3/d3-timer |
+| d3-transition | 3.0.1 | ISC | https://github.com/d3/d3-transition |
+| d3-zoom | 3.0.0 | ISC | https://github.com/d3/d3-zoom |
+| dagre-d3-es | 7.0.14 | MIT | https://github.com/tbo47/dagre-es |
+| dayjs | 1.11.23 | MIT | https://github.com/iamkun/dayjs |
+| delaunator | 5.1.0 | ISC | https://github.com/mapbox/delaunator |
+| dompurify | 3.4.16 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify |
+| elkjs | 0.9.3 | EPL-2.0 | https://github.com/kieler/elkjs |
+| entities | 8.1.0 | BSD-2-Clause | https://github.com/fb55/entities |
+| es-toolkit | 1.52.0 | MIT | https://github.com/toss/es-toolkit |
+| internmap | 2.0.3 | ISC | https://github.com/mbostock/internmap |
+| katex | 0.19.0 | MIT | https://github.com/KaTeX/KaTeX |
+| khroma | 2.1.0 | see package | github:fabiospampinato/khroma |
+| layout-base | 1.0.2 | MIT | https://github.com/iVis-at-Bilkent/layout-base |
+| linkify-it | 6.1.0 | MIT | https://github.com/markdown-it/linkify-it |
+| lodash-es | 4.18.1 | MIT | lodash/lodash |
+| markdown-it | 15.0.2 | MIT | markdown-it/markdown-it |
+| mdurl | 2.1.0 | MIT | https://github.com/markdown-it/mdurl |
+| mermaid | 12.1.0 | MIT | https://github.com/mermaid-js/mermaid |
+| punycode.js | 2.3.1 | MIT | https://github.com/mathiasbynens/punycode.js |
+| robust-predicates | 3.0.3 | Unlicense | https://github.com/mourner/robust-predicates |
+| roughjs | 4.6.6 | MIT | https://github.com/pshihn/rough |
 | style-mod | 4.1.4 | MIT | https://code.haverbeke.berlin/marijn/style-mod |
+| stylis | 4.4.0 | MIT | https://github.com/thysultan/stylis.js |
+| ts-dedent | 2.3.0 | MIT | https://github.com/tamino-martinius/node-ts-dedent |
+| uc.micro | 3.0.0 | MIT | markdown-it/uc.micro |
+| uuid | 14.0.2 | MIT | https://github.com/uuidjs/uuid |
 | w3c-keyname | 2.2.8 | MIT | https://github.com/marijnh/w3c-keyname |

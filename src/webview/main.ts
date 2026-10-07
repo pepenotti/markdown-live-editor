@@ -101,6 +101,14 @@ function applyConfig(next: EditorConfig): void {
   if (next.fontFamily.trim()) root.setProperty('--mdl-font', next.fontFamily);
   else root.removeProperty('--mdl-font');
   root.setProperty('--mdl-line-width', next.lineWidth > 0 ? `${next.lineWidth}px` : 'none');
+  let custom = document.getElementById('mdl-custom-css') as HTMLStyleElement | null;
+  if (!custom) {
+    custom = document.createElement('style');
+    custom.id = 'mdl-custom-css';
+    custom.nonce = nonce;
+    document.head.append(custom);
+  }
+  custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
 }
@@ -533,8 +541,18 @@ host.onMessage((message) => {
         mode: view?.state.field(modeField) ?? 'raw',
         epoch: sync?.epoch ?? -1,
         problems: [...problems],
+        rendered: {
+          diagrams: document.querySelectorAll('.cm-md-mermaid[data-state="done"] svg').length,
+          diagramErrors: document.querySelectorAll('.cm-md-mermaid[data-state="error"]').length,
+          math: document.querySelectorAll('.cm-md-math .katex').length,
+        },
       });
       break;
+    case 'selectionRequest': {
+      const sel = view?.state.selection.main;
+      host.post({ type: 'selectionState', reqId: message.reqId, text: view && sel && !sel.empty ? view.state.doc.sliceString(sel.from, sel.to) : '' });
+      break;
+    }
   }
 });
 

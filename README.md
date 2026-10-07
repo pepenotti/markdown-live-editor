@@ -22,6 +22,10 @@ Tables are edited in place, with a bar for rows, columns and alignment:
 
 ![Editing a table cell](images/table.png)
 
+Math and Mermaid diagrams are drawn in place. Here the cursor is in the formula, so its source shows above the result:
+
+![Math and a Mermaid diagram](images/diagrams.png)
+
 Full preview hides all syntax; links and images are edited in a popover. It follows your colour theme:
 
 ![Full preview in a dark theme with the link popover](images/full-preview-dark.png)
@@ -33,7 +37,7 @@ The file on disk is always plain Markdown. The editor never rewrites text you di
 1. Install the packaged extension:
 
    ```bash
-   code --install-extension seamless-markdown-0.1.1.vsix
+   code --install-extension seamless-markdown-0.2.0.vsix
    ```
 
 2. Open a Markdown file, then click the preview icon in the editor title bar, or run **Seamless Markdown: Open with Seamless Markdown** from the Command Palette.
@@ -52,10 +56,14 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Formatting**: bold, italic, strikethrough, inline code, headings, bullet, numbered and task lists, quotes, code blocks, links, rules. By typing Markdown, by shortcut, or from the toolbar.
 - **Tables**: rendered as a grid in both preview modes. Click a cell to edit it. `Tab` and `Shift+Tab` move between cells, `Enter` moves down, and both add a row at the end. Arrow keys move in and out of the table. A small bar above the table inserts, deletes and moves rows and columns, sets column alignment, and shows the table's Markdown source.
 - **Images**: shown inline, with relative paths resolved from the document. Paste an image from the clipboard or drop one in and it is saved to an `assets` folder next to the document and linked. Dragging a file from the Explorer links it without copying (hold `Shift` while dropping, as VS Code requires). File paths are completed as you type the target of a link or image.
+- **Math**: `$x^2$` inline and `$$` blocks, drawn with KaTeX. A price such as $5 is left alone.
+- **Mermaid diagrams**: a `mermaid` code block is drawn as a diagram. Click a diagram or formula block, or move into it with the arrow keys, to edit its source with the result shown underneath.
 - **Slash menu**: type `/` at the start of a line to insert a heading, list, quote, code block, table, image, link or divider.
 - **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table.
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
+- **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
+- **Copy as HTML**: copies the selection, or the whole document, as HTML.
 - **Find and replace**, **Go to Heading**, **folding** of the section under a heading (hover a heading and click the arrow in the margin), word count and reading time in the status bar.
 - Follows the VS Code colour theme, and works with undo, redo, save, hot exit, split editors and source control exactly like a text file, because it edits the same text document.
 
@@ -96,12 +104,15 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.showToolbar` | `true` | Show the toolbar |
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
+| `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations
 
-- VS Code does not offer the Outline view, breadcrumb symbols or its own find widget to custom editors. Use **Go to Heading** and the built-in find panel instead.
-- HTML is shown as source. `<img>` tags get an image preview next to them. Mermaid diagrams and math are not rendered.
+- VS Code does not offer its own Outline view, breadcrumb symbols or find widget to custom editors. Use the Markdown Outline panel, **Go to Heading** and the editor's find panel instead.
+- HTML is shown as source. `<img>` tags get an image preview next to them.
+- Diagrams other than Mermaid (Graphviz, ECharts and so on) are not drawn. Inline math cannot be edited in full preview; switch to half preview for that.
+- There is no side-by-side split view. The point of the editor is that you do not need one.
 - Tables that are indented or sit inside a list or quote are shown as source.
 - In full preview, a reference-style link (`[text][label]`) shows its target read-only; edit it in half preview. An empty code block cannot be entered with the arrow keys; use the toolbar button, which puts the cursor inside.
 - Typing is sent to VS Code in short bursts so that one burst is one undo step. If you have both `files.autoSave` with a delay and `files.trimTrailingWhitespace` on, a trailing space can be trimmed while you pause in the middle of a sentence, because VS Code cannot see the cursor of a custom editor.

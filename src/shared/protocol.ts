@@ -19,6 +19,8 @@ export interface EditorConfig {
   showToolbar: boolean;
   /** Re-pad the pipes of a table whenever one of its cells is edited. */
   tableAutoAlign: boolean;
+  /** Extra CSS rules applied to the editor. */
+  customCss: string;
 }
 
 /**
@@ -82,6 +84,7 @@ export type HostMessage =
   | { type: 'config'; config: EditorConfig }
   | { type: 'flush'; reqId: number }
   | { type: 'debugRequest'; reqId: number }
+  | { type: 'selectionRequest'; reqId: number }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
 export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris';
@@ -113,7 +116,17 @@ export type WebviewMessage =
   | { type: 'openLink'; href: string }
   | { type: 'request'; reqId: number; kind: RequestKind; payload?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
-  | { type: 'debugState'; reqId: number; text: string; mode: Mode; epoch: number; problems: string[] };
+  | { type: 'selectionState'; reqId: number; text: string }
+  | {
+      type: 'debugState';
+      reqId: number;
+      text: string;
+      mode: Mode;
+      epoch: number;
+      problems: string[];
+      /** How many diagrams and formulas are drawn on screen, and how many diagrams failed. */
+      rendered: { diagrams: number; diagramErrors: number; math: number };
+    };
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'bmp', 'ico'];
 

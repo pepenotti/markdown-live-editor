@@ -1,8 +1,10 @@
+import MarkdownIt from 'markdown-it';
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
-import { extractHeadings } from '../shared/textUtil';
+import { buildOutline, extractHeadings } from '../shared/textUtil';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
+import { OutlineProvider } from './outline';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
@@ -124,6 +126,25 @@ export function activate(context: vscode.ExtensionContext): unknown {
     session.send('focus');
   });
 
+  register('revealLine', (line: number) => {
+    const session = provider.active;
+    if (!session || typeof line !== 'number') return;
+    session.send('revealLine', line);
+  });
+
+  const outline = new OutlineProvider(provider);
+  context.subscriptions.push(outline, vscode.window.registerTreeDataProvider('seamlessMarkdown.outline', outline));
+
+  register('copyAsHtml', async () => {
+    const session = provider.active;
+    if (!session) return;
+    await session.flush();
+    const selected = await session.selectedText();
+    const html = new MarkdownIt({ html: true, linkify: true }).render(selected || session.document.getText());
+    await vscode.env.clipboard.writeText(html);
+    vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
+  });
+
   register('setAsDefault', async () => {
     await provider.setDefault(true);
     void vscode.window.showInformationMessage('Markdown files now open with Seamless Markdown.');
@@ -183,6 +204,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     state: async (uri: vscode.Uri) => (await only(uri)).debugState(),
     states: async (uri: vscode.Uri) => Promise.all(provider.sessionsFor(uri).map((s) => s.debugState())),
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
+    outline: async (uri: vscode.Uri) => buildOutline(extractHeadings((await only(uri)).document.getText())),
     openLink: async (uri: vscode.Uri, href: string) => provider.openLink(await only(uri), href),
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
     listFiles: async (uri: vscode.Uri, imagesOnly: boolean) => listFiles((await only(uri)).document, imagesOnly),

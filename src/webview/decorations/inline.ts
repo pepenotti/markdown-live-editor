@@ -9,7 +9,9 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import type { SyntaxNode, Tree } from '@lezer/common';
 import { renderConfig } from '../config';
 import { stripUrl } from '../inlineRender';
+import { texOf } from '../markdown';
 import { modeField, refreshDecorations } from '../modes';
+import { MathWidget } from '../widgets/rendered';
 import { AlertLabelWidget, CheckboxWidget, CodeHeaderWidget, FoldWidget, ImageWidget, isFoldedAt, RuleWidget } from '../widgets/simple';
 
 /** inline: marker inside a line. leading: marker at the start of a line. line: a whole hidden line. */
@@ -330,6 +332,20 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
             }
             return false;
           }
+
+          case 'InlineMath': {
+            const text = doc.sliceString(from, to);
+            const shown = touches(from, to);
+            if (shown) mark('cm-md-mark cm-md-math-source', from, to);
+            else hide(from, to);
+            const widget = new MathWidget(texOf(text), text.startsWith('$$'));
+            decos.push(Decoration.widget({ widget, side: full ? -1 : 1 }).range(to));
+            return false;
+          }
+
+          case 'BlockMath':
+            eachLine(from, to, (lineFrom) => decos.push(lineDeco('cm-md-codeblock cm-md-math-lines').range(lineFrom)));
+            return false;
 
           case 'LinkReference':
             mark('cm-md-mark', from, to);
