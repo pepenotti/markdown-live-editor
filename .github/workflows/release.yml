@@ -1,0 +1,56 @@
+name: Release
+
+# Runs when a version tag such as v0.1.2 is pushed (see "Releasing" in the README).
+# It tests and packages that commit, creates the GitHub release with the .vsix attached,
+# and publishes to the Marketplace when the VSCE_PAT secret is set.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check the tag matches package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match package.json version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Integration tests in VS Code
+        run: xvfb-run -a npx vscode-test
+      - run: npm run package
+      - name: Release notes from the changelog
+        run: node scripts/changelog-section.mjs "$VERSION" > release-notes.md
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" *.vsix --title "$TAG" --notes-file release-notes.md --verify-tag
+      - name: Publish to the Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::notice::VSCE_PAT is not set, so the Marketplace publish was skipped. The .vsix is attached to the release."
+            exit 0
+          fi
+          npx vsce publish --no-dependencies --packagePath *.vsix

@@ -2,6 +2,8 @@
 
 A Markdown editor for VS Code that removes the need for a separate preview. You edit one document and choose how much of the syntax you want to see.
 
+![Typing Markdown, editing a table and switching between the three modes](images/demo.gif)
+
 ![The same document in raw, half preview and full preview](images/modes.png)
 
 | Mode | What you see | How you edit |
@@ -114,6 +116,7 @@ npm test                   # unit tests
 npm run test:integration   # runs the editor inside a real VS Code
 npm run package            # produces the .vsix
 npm run screenshots        # regenerates the icon and README images
+npm run demo-gif           # regenerates the animated demo
 ```
 
 `npm run harness` serves the project on port 5173. `http://localhost:5173/harness/index.html?doc=features.md&mode=half&theme=dark` runs the editor in a plain browser against a stand-in for the extension host, which is the quickest way to work on rendering.
@@ -123,6 +126,25 @@ How it is put together:
 - `src/extension` is the extension host side: a `CustomTextEditorProvider`, document sync, image and link handling, commands.
 - `src/webview` is the editor: CodeMirror 6 with the Lezer Markdown parser. The three modes are three levels of decoration over the same text, so nothing is ever converted to another format and back.
 - `src/shared` holds the message protocol between the two.
+
+### Releasing
+
+`main` is protected: changes go in through a pull request, and the CI check has to pass.
+
+1. On a branch, bump the version and describe it in `CHANGELOG.md` under a `## x.y.z` heading:
+
+   ```bash
+   npm version patch --no-git-tag-version
+   ```
+
+2. Open a pull request and merge it once CI is green.
+3. On an up-to-date `main`, create and push the tag:
+
+   ```bash
+   npm run release:tag
+   ```
+
+The tag starts the Release workflow. It runs the tests again, builds the `.vsix`, creates a GitHub release with the `.vsix` attached and that version's changelog as notes, and publishes to the Marketplace if the repository has a `VSCE_PAT` secret. Without the secret it stops after the GitHub release, and `npx vsce publish --no-dependencies` publishes by hand.
 
 ### Checks that still need a person
 
