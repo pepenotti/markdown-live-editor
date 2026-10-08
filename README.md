@@ -54,7 +54,7 @@ code --extensionDevelopmentPath="$PWD" sample
 ## Features
 
 - **Formatting**: bold, italic, strikethrough, inline code, headings, bullet, numbered and task lists, quotes, code blocks, links, rules. By typing Markdown, by shortcut, or from the toolbar.
-- **Tables**: rendered as a grid in both preview modes. Click a cell to edit it. `Tab` and `Shift+Tab` move between cells, `Enter` moves down, and both add a row at the end. Arrow keys move in and out of the table. A small bar above the table inserts, deletes and moves rows and columns, sets column alignment, and shows the table's Markdown source.
+- **Tables**: rendered as a grid in both preview modes. Click a cell to edit it. `Tab` and `Shift+Tab` move between cells, `Enter` moves down, and both add a row at the end. Arrow keys move in and out of the table. A small bar above the table inserts, deletes, moves and duplicates rows and columns, sorts by a column, sets column alignment, and shows the table's Markdown source. Right-click a cell, or press the bar's `…` button, for the full menu, which also clears a row or column and copies the table as Markdown or TSV.
 - **Images**: shown inline, with relative paths resolved from the document. Paste an image from the clipboard or drop one in and it is saved to an `assets` folder next to the document and linked. Dragging a file from the Explorer links it without copying (hold `Shift` while dropping, as VS Code requires). File paths are completed as you type the target of a link or image. Drag the corner of a picture to resize it; since Markdown has no syntax for a size, the image is then written as an `<img>` tag with a `width`.
 - **Footnotes**: `[^1]` is shown as a raised number and its `[^1]: text` definition as a small numbered note. `Cmd`/`Ctrl`+click jumps between the two.
 - **Math**: `$x^2$` inline and `$$` blocks, drawn with KaTeX. A price such as $5 is left alone.
@@ -89,6 +89,7 @@ code --extensionDevelopmentPath="$PWD" sample
 | Indent / outdent a list item | `Tab` / `Shift+Tab` |
 | Move a table row | `Alt+Up` / `Alt+Down` in a cell |
 | Delete a table row / column | `Mod+Shift+Backspace` / `Mod+Alt+Backspace` in a cell |
+| Duplicate a table row | `Mod+Shift+D` in a cell |
 | Add another cursor | `Alt`+click |
 
 `Mod+K` is not used for links because it starts VS Code's two-key shortcuts.
