@@ -586,6 +586,35 @@ body {
   height: auto;
   border-radius: 4px;
 }
+#app .cm-md-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+#app .cm-md-image-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--mdl-bg, #fff);
+  border-radius: 4px 0 4px 0;
+  background: var(--mdl-accent);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+#app .cm-md-image-frame:hover .cm-md-image-handle,
+#app .cm-md-image-resizing .cm-md-image-handle {
+  opacity: 1;
+}
+#app .cm-md-image-resizing img {
+  outline: 1px solid var(--mdl-accent);
+}
+#app .cm-md-image-error .cm-md-image-frame {
+  display: none;
+}
 #app .cm-md-image-missing {
   display: none;
 }
@@ -790,6 +819,25 @@ body {
   color: var(--vscode-errorForeground, #cf222e);
 }
 
+/* ---------- footnotes ---------- */
+#app .cm-md-footnote-ref {
+  color: var(--mdl-link);
+  font-size: 0.75em;
+  line-height: 0;
+  padding: 0 1px;
+}
+#app .cm-md-footnote {
+  font-size: 0.88em;
+  color: var(--mdl-dim);
+}
+#app .cm-md-footnote-label {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 0.3em;
+  color: var(--mdl-link);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- popovers, completion, search ---------- */
 #app .cm-tooltip {
   background: var(--mdl-widget);
@@ -834,6 +882,15 @@ body {
 }
 #app .cm-md-popover-note {
   color: var(--mdl-dim);
+}
+#app .cm-md-popover [hidden] {
+  display: none;
+}
+#app .cm-md-popover input[data-field='tex'] {
+  font-family: var(--mdl-mono);
+}
+#app .cm-md-popover input[aria-invalid='true'] {
+  border-color: var(--vscode-inputValidation-errorBorder, #d1242f);
 }
 #app .cm-md-popover-actions {
   display: flex;

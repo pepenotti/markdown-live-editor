@@ -35,7 +35,9 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     fontFamily: c.get<string>('fontFamily', ''),
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
+    pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    spellCheck: c.get<boolean>('spellCheck', false),
   };
 }
 
