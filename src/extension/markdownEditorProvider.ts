@@ -16,6 +16,7 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { readTocOptions } from './toc';
 
 export interface Stats {
   words: number;
@@ -37,6 +38,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    toc: readTocOptions(resource),
     spellCheck: c.get<boolean>('spellCheck', false),
   };
 }
@@ -132,6 +134,7 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
+          test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
         for (const done of this.readyWaiters.splice(0)) done();

@@ -3,6 +3,7 @@
 import { syntaxTree } from '@codemirror/language';
 import { EditorSelection, type ChangeSpec, type EditorState, type Line, type SelectionRange, type TransactionSpec } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
+import { findTocMarkers, tocBlock, type TocOptions, tocUpdate } from '../../shared/toc';
 import { emptyTable } from '../table/model';
 
 export type FormatCommand = (state: EditorState) => TransactionSpec | null;
@@ -364,6 +365,21 @@ export const insertRule: FormatCommand = (state) => {
 
 export function insertTable(rows = 3, cols = 3): FormatCommand {
   return (state) => insertBlock(state, emptyTable(rows, cols), { from: 2, to: 10 });
+}
+
+/**
+ * Inserts a table of contents at the cursor. A document has one table of contents:
+ * when it is already there, its list is brought up to date instead.
+ */
+export function insertToc(options: TocOptions): FormatCommand {
+  return (state) => {
+    const text = state.doc.toString();
+    if (findTocMarkers(text)) {
+      const edit = tocUpdate(text, options);
+      return edit ? { changes: edit, scrollIntoView: true, userEvent: USER_EVENT } : null;
+    }
+    return insertBlock(state, tocBlock(text, options));
+  };
 }
 
 const URL_RE = /^(?:https?:\/\/|mailto:|www\.)\S+$/i;

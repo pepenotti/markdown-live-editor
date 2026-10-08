@@ -16,7 +16,8 @@ import {
   type Mode,
   MODES,
 } from '../shared/protocol';
-import { countWords, extractHeadings, slugify } from '../shared/textUtil';
+import { countWords, extractHeadings, headingSlugs, slugify } from '../shared/textUtil';
+import { DEFAULT_TOC_OPTIONS } from '../shared/toc';
 import {
   type FormatCommand,
   insertBlock,
@@ -25,6 +26,7 @@ import {
   insertPaths,
   insertRule,
   insertTable,
+  insertToc,
   pasteMarkdown,
   setHeading,
   shiftHeading,
@@ -68,6 +70,7 @@ let sync: SyncClient | undefined;
 let toolbar: Toolbar | undefined;
 let config: EditorConfig;
 let isMac = /Mac/.test(navigator.platform);
+let testSession = false;
 let resolveUrl: (src: string) => string = (s) => s;
 const renderCompartment = new Compartment();
 
@@ -147,17 +150,9 @@ function revealLine(line: number): void {
 function revealAnchor(anchor: string): void {
   if (!view) return;
   const wanted = slugify(decodeURIComponent(anchor.replace(/^#/, '')));
-  const seen = new Map<string, number>();
-  for (const h of extractHeadings(view.state.doc.toString())) {
-    // Repeated headings get -1, -2, … like on GitHub.
-    const base = slugify(h.text.replace(/[*_`~]/g, ''));
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    if ((count ? `${base}-${count}` : base) === wanted) {
-      revealLine(h.line);
-      return;
-    }
-  }
+  const headings = extractHeadings(view.state.doc.toString());
+  const index = headingSlugs(headings).indexOf(wanted);
+  if (index >= 0) revealLine(headings[index].line);
 }
 
 function openLink(href: string): void {
@@ -242,6 +237,8 @@ function runCommand(id: CommandId, arg?: unknown): void {
       return apply(insertCodeBlock);
     case 'rule':
       return apply(insertRule);
+    case 'toc':
+      return apply(insertToc(config.toc ?? DEFAULT_TOC_OPTIONS));
     case 'bulletList':
       return apply(toggleList('bullet'));
     case 'orderedList':
@@ -464,6 +461,7 @@ function onUpdate(update: ViewUpdate): void {
 
 function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   isMac = message.isMac;
+  testSession = message.test === true;
   resolveUrl = makeResolver(message.baseUri, message.rootUri);
   config = message.config;
   applyConfig(message.config);
@@ -593,6 +591,12 @@ host.onMessage((message) => {
           math: document.querySelectorAll('.cm-md-math .katex').length,
         },
       });
+      break;
+    case 'debugType':
+      if (view && testSession) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at, insert: message.text }, selection: { anchor: at + message.text.length }, userEvent: 'input.type' });
+      }
       break;
     case 'selectionRequest': {
       const sel = view?.state.selection.main;

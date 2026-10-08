@@ -184,6 +184,16 @@
         "category": "Seamless Markdown"
       },
       {
+        "command": "seamlessMarkdown.insertTableOfContents",
+        "title": "Insert Table of Contents",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.updateTableOfContents",
+        "title": "Update Table of Contents",
+        "category": "Seamless Markdown"
+      },
+      {
         "command": "seamlessMarkdown.toggleBulletList",
         "title": "Toggle Bullet List",
         "category": "Seamless Markdown"
@@ -441,6 +451,14 @@
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
+          "command": "seamlessMarkdown.insertTableOfContents",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' || editorLangId == markdown"
+        },
+        {
+          "command": "seamlessMarkdown.updateTableOfContents",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' || editorLangId == markdown"
+        },
+        {
           "command": "seamlessMarkdown.toggleBulletList",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
@@ -589,6 +607,23 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Paste formatted text copied from a web page or a word processor as Markdown. Paste with `Shift` held to get the plain text."
+        },
+        "seamlessMarkdown.toc.updateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Bring the table of contents between `<!-- toc -->` and `<!-- tocstop -->` up to date when a Markdown file is saved, also in the plain text editor. Files without these markers are never changed."
+        },
+        "seamlessMarkdown.toc.levels": {
+          "type": "string",
+          "default": "1..6",
+          "pattern": "^\\s*[1-6]\\s*(\\.\\.\\s*[1-6]\\s*)?$",
+          "patternErrorMessage": "Use a range such as 2..4, or a single level such as 2.",
+          "markdownDescription": "Heading levels listed in a table of contents, for example `2..4`. A single H1 is taken to be the title and is always left out."
+        },
+        "seamlessMarkdown.toc.ordered": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write the table of contents as a numbered list instead of bullets."
         },
         "seamlessMarkdown.promptToSetDefault": {
           "type": "boolean",

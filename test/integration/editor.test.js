@@ -262,6 +262,137 @@ suite('Seamless Markdown', () => {
     assert.ok(outline[0].children.some((c) => c.text === 'Tables'));
   });
 
+  /* ---------- table of contents ---------- */
+
+  const STALE = '# Title\n\n<!-- toc -->\n- [Old](#old)\n<!-- tocstop -->\n\n## Alpha\n\n### Beta\n';
+  const FRESH = '# Title\n\n<!-- toc -->\n- [Alpha](#alpha)\n  - [Beta](#beta)\n<!-- tocstop -->\n\n## Alpha\n\n### Beta\n';
+
+  /** Writes a file and opens it in the plain text editor. */
+  async function openText(name, content) {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, content);
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    return { file, document, editor, uri: document.uri };
+  }
+
+  async function append(document, text) {
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(document.uri, document.lineAt(document.lineCount - 1).range.end, text);
+    assert.ok(await vscode.workspace.applyEdit(edit));
+  }
+
+  async function withSettings(values, run) {
+    const config = vscode.workspace.getConfiguration('seamlessMarkdown');
+    try {
+      for (const [key, value] of Object.entries(values)) await config.update(key, value, vscode.ConfigurationTarget.Global);
+      await run();
+    } finally {
+      for (const key of Object.keys(values)) await config.update(key, undefined, vscode.ConfigurationTarget.Global);
+    }
+  }
+
+  test('saving in the plain text editor brings the table of contents up to date', async () => {
+    const { file, document } = await openText('toc-text.md', STALE);
+    await append(document, '\n## Gamma\n');
+    assert.ok(await document.save());
+    assert.strictEqual(document.isDirty, false);
+    assert.strictEqual(
+      fs.readFileSync(file, 'utf8'),
+      '# Title\n\n<!-- toc -->\n- [Alpha](#alpha)\n  - [Beta](#beta)\n- [Gamma](#gamma)\n<!-- tocstop -->\n\n## Alpha\n\n### Beta\n\n## Gamma\n',
+    );
+  });
+
+  test('saving leaves a table of contents that is up to date alone', async () => {
+    const { file, document } = await openText('toc-fresh.md', FRESH);
+    await append(document, '\nMore text, no new heading.\n');
+    let changes = 0;
+    const listener = vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document === document && e.contentChanges.length) changes++;
+    });
+    try {
+      assert.ok(await document.save());
+    } finally {
+      listener.dispose();
+    }
+    assert.strictEqual(changes, 0, 'the save must not edit the document');
+    assert.strictEqual(document.isDirty, false);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), FRESH + '\nMore text, no new heading.\n');
+  });
+
+  test('saving does not touch files without the markers, and keeps CRLF in files with them', async () => {
+    const plain = '# Title\n\n## Alpha\n\n- [Old](#old)\n';
+    const first = await openText('toc-none.md', plain);
+    await append(first.document, 'tail\n');
+    assert.ok(await first.document.save());
+    assert.strictEqual(fs.readFileSync(first.file, 'utf8'), plain + 'tail\n');
+
+    const second = await openText('toc-crlf.md', STALE.replace(/\n/g, '\r\n'));
+    assert.strictEqual(second.document.eol, vscode.EndOfLine.CRLF);
+    await append(second.document, 'tail\r\n');
+    assert.ok(await second.document.save());
+    assert.strictEqual(fs.readFileSync(second.file, 'utf8'), (FRESH + 'tail\n').replace(/\n/g, '\r\n'));
+  });
+
+  test('the table of contents commands work in the plain text editor and follow the settings', async () => {
+    const { file, document, editor } = await openText('toc-commands.md', '# Title\n\n## Alpha\n\n### Beta\n');
+    editor.selection = new vscode.Selection(1, 0, 1, 0);
+    await vscode.commands.executeCommand('seamlessMarkdown.insertTableOfContents');
+    assert.strictEqual(document.getText(), FRESH);
+    await withSettings({ 'toc.updateOnSave': false, 'toc.levels': '3..3', 'toc.ordered': true }, async () => {
+      // Update on save is off: the list stays as it is although the settings changed.
+      assert.ok(await document.save());
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), FRESH);
+      await vscode.commands.executeCommand('seamlessMarkdown.updateTableOfContents');
+      assert.strictEqual(document.getText(), '# Title\n\n<!-- toc -->\n1. [Beta](#beta)\n<!-- tocstop -->\n\n## Alpha\n\n### Beta\n');
+    });
+    // With the default settings back, saving restores the full list.
+    assert.ok(await document.save());
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), FRESH);
+    // The command has nothing left to do and must not dirty the document.
+    await vscode.commands.executeCommand('seamlessMarkdown.updateTableOfContents');
+    assert.strictEqual(document.getText(), FRESH);
+    assert.strictEqual(document.isDirty, false);
+  });
+
+  test('inserts and updates a table of contents in the editor', async () => {
+    fs.writeFileSync(path.join(dir, 'toc-insert.md'), '\n# Title\n\n## Alpha\n\n### Beta\n');
+    const { uri, document } = await open('toc-insert.md');
+    await inStep(uri, document);
+    await api.command(uri, 'toc');
+    await until(() => document.getText() === '<!-- toc -->\n- [Alpha](#alpha)\n  - [Beta](#beta)\n<!-- tocstop -->\n\n# Title\n\n## Alpha\n\n### Beta\n', 'the list to reach the document');
+    await append(document, '\n## Gamma\n');
+    await inStep(uri, document);
+    await vscode.commands.executeCommand('seamlessMarkdown.updateTableOfContents');
+    assert.ok(document.getText().startsWith('<!-- toc -->\n- [Alpha](#alpha)\n  - [Beta](#beta)\n- [Gamma](#gamma)\n<!-- tocstop -->\n'));
+    // The marker lines are hidden in full preview; the webview must still hold the same text.
+    await api.command(uri, 'setMode', 'full');
+    await until(async () => (await api.mode(uri)) === 'full', 'full preview');
+    const state = await inStep(uri, document);
+    assert.deepStrictEqual(state.problems, []);
+  });
+
+  test('saving includes typing the editor has not sent yet in the file and in its table of contents', async () => {
+    fs.writeFileSync(path.join(dir, 'toc-typing.md'), STALE);
+    const { uri, document } = await open('toc-typing.md');
+    await inStep(uri, document);
+    // Make the document dirty first, so that the save below is a real one.
+    await vscode.commands.executeCommand('seamlessMarkdown.updateTableOfContents');
+    assert.strictEqual(document.getText(), FRESH);
+    await inStep(uri, document);
+    // Typed text waits in the webview for a moment. Save while it is still there, and not
+    // through the editor's own Save command, which would ask for it first.
+    await api.post(uri, { type: 'debugType', text: '## Zed\n\n' });
+    assert.strictEqual(document.getText(), FRESH, 'the typing has not arrived yet');
+    assert.ok(await document.save());
+    const expected = '## Zed\n\n# Title\n\n<!-- toc -->\n- [Zed](#zed)\n- [Alpha](#alpha)\n  - [Beta](#beta)\n<!-- tocstop -->\n\n## Alpha\n\n### Beta\n';
+    assert.strictEqual(fs.readFileSync(uri.fsPath, 'utf8'), expected);
+    assert.strictEqual(document.getText(), expected);
+    assert.strictEqual(document.isDirty, false);
+    const state = await inStep(uri, document);
+    assert.deepStrictEqual(state.problems, []);
+  });
+
   test('is offered for Markdown files but does not take over as the default', async () => {
     const uri = vscode.Uri.file(path.join(dir, 'notes', 'other.md'));
     await vscode.commands.executeCommand('vscode.open', uri);
