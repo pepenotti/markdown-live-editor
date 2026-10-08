@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Export is now reachable from an Export button in the toolbar, the Explorer right-click menu and the Command Palette for any Markdown file, and always reports what it did.
+- Export as PDF writes the PDF in one step, using an installed Chrome, Edge, Chromium or Brave. Without one, the command is not offered. The print-from-browser route is gone.
+- Exported HTML and PDF now contain Mermaid diagrams as drawn images and math typeset with KaTeX. Exported files contain no scripts.
+- Email Document: copies the document as formatted text and opens a new email to paste it into.
+- Removed the `seamlessMarkdown.export.mermaidFromCdn` setting.
+- A shorter README, with developer notes moved to CONTRIBUTING.md.
+
 ## 0.4.0
 
 - Broken link checking: links to missing files, headings and reference definitions are underlined and listed in the Problems panel, with a quick fix for mistyped heading links. Nothing is fetched from the network. Turn it off with `seamlessMarkdown.checkLinks`.
