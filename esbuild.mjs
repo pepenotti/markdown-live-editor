@@ -22,6 +22,17 @@ const extension = {
   external: ['vscode'],
 };
 
+// Markdown-to-HTML for Copy as HTML and the exports: markdown-it, KaTeX and the highlighting
+// grammars. The extension requires it the first time it is needed, not on activation.
+const exporter = {
+  ...common,
+  entryPoints: ['src/shared/exportHtml.ts'],
+  outfile: 'dist/export.js',
+  platform: 'node',
+  format: 'cjs',
+  target: 'node18',
+};
+
 const webview = {
   ...common,
   entryPoints: ['src/webview/main.ts'],
@@ -53,9 +64,9 @@ const diagrams = {
 };
 
 if (watch) {
-  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(webview), esbuild.context(styles), esbuild.context(diagrams)]);
+  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(exporter), esbuild.context(webview), esbuild.context(styles), esbuild.context(diagrams)]);
   await Promise.all(contexts.map((c) => c.watch()));
   console.log('watching…');
 } else {
-  await Promise.all([esbuild.build(extension), esbuild.build(webview), esbuild.build(styles), esbuild.build(diagrams)]);
+  await Promise.all([esbuild.build(extension), esbuild.build(exporter), esbuild.build(webview), esbuild.build(styles), esbuild.build(diagrams)]);
 }

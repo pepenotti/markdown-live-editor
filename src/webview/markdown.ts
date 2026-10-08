@@ -11,12 +11,7 @@ export function footnoteId(source: string): string {
   return source.slice(2, source.indexOf(']')).toLowerCase();
 }
 
-/** The TeX inside a math node's text. */
-export function texOf(source: string): string {
-  const width = source.startsWith('$$') ? 2 : 1;
-  const end = source.endsWith('$'.repeat(width)) && source.length >= width * 2 ? source.length - width : source.length;
-  return source.slice(width, end).trim();
-}
+export { texOf } from '../shared/markdownSyntax';
 
 /** The source of a math node with its TeX replaced, or null when the TeX would not stay one formula. */
 export function withTex(source: string, tex: string): string | null {

@@ -56,8 +56,19 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
     "@lezer/common": "^1.5.3",
+    "@lezer/cpp": "^1.1.6",
+    "@lezer/css": "^1.3.8",
+    "@lezer/go": "^1.0.1",
     "@lezer/highlight": "^1.2.5",
+    "@lezer/html": "^1.3.13",
+    "@lezer/java": "^1.1.4",
+    "@lezer/javascript": "^1.5.6",
+    "@lezer/json": "^1.0.3",
     "@lezer/markdown": "^1.7.2",
+    "@lezer/python": "^1.1.19",
+    "@lezer/rust": "^1.0.3",
+    "@lezer/xml": "^1.0.6",
+    "@lezer/yaml": "^1.0.4",
     "@types/markdown-it": "^14.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.4",
@@ -271,6 +282,16 @@
       {
         "command": "seamlessMarkdown.copyAsHtml",
         "title": "Copy as HTML",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.exportHtml",
+        "title": "Export as HTML\u2026",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.exportPdf",
+        "title": "Export as PDF\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -523,6 +544,14 @@
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
+          "command": "seamlessMarkdown.exportHtml",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
+          "command": "seamlessMarkdown.exportPdf",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
           "command": "seamlessMarkdown.revealLine",
           "when": "false"
         }
@@ -640,6 +669,22 @@
           "default": "",
           "editPresentation": "multilineText",
           "markdownDescription": "Extra CSS rules for the editor, for example `#app .cm-content { font-family: Georgia; }`."
+        },
+        "seamlessMarkdown.export.embedImages": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Embed local images in the file written by **Export as HTML**, so that it can be moved or sent on its own. When off, images keep their relative paths."
+        },
+        "seamlessMarkdown.export.mermaidFromCdn": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Draw Mermaid diagrams in exported files by loading Mermaid from the jsDelivr CDN when the file is opened. When off, a diagram is exported as its source in a code block and the file needs no network."
+        },
+        "seamlessMarkdown.export.browserPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Path of the Chrome, Edge or Chromium executable used by **Create PDF now** in **Export as PDF**. Empty looks in the usual places."
         },
         "seamlessMarkdown.spellCheck": {
           "type": "boolean",

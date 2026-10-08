@@ -3,7 +3,7 @@
 import { tags as t } from '@lezer/highlight';
 import { GFM, type MarkdownConfig, parser as baseParser } from '@lezer/markdown';
 
-const FRONT_MATTER_NEXT = /^\s*(?:[A-Za-z_][\w .-]*:|#|-\s|---\s*$|\.\.\.\s*$)/;
+export const FRONT_MATTER_NEXT = /^\s*(?:[A-Za-z_][\w .-]*:|#|-\s|---\s*$|\.\.\.\s*$)/;
 
 /** A `---` block at the very start of the document is YAML front matter, not a rule. */
 export const frontMatter: MarkdownConfig = {
@@ -96,9 +96,16 @@ export const math: MarkdownConfig = {
   ],
 };
 
-const FOOTNOTE_DEF = /^\[\^([^\s\[\]]+)\]:(?:[ \t]|$)/;
+/** The TeX inside the source of a math node. */
+export function texOf(source: string): string {
+  const width = source.startsWith('$$') ? 2 : 1;
+  const end = source.endsWith('$'.repeat(width)) && source.length >= width * 2 ? source.length - width : source.length;
+  return source.slice(width, end).trim();
+}
+
+export const FOOTNOTE_DEF = /^\[\^([^\s\[\]]+)\]:(?:[ \t]|$)/;
 /** Lines that start a block of their own and so never continue a footnote's text. */
-const BLOCK_START = /^(?:\[\^|#{1,6}(?:\s|$)|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|```|~~~|\$\$|\||<|(?:[-*_][ \t]*){3,}$)/;
+export const BLOCK_START = /^(?:\[\^|#{1,6}(?:\s|$)|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|```|~~~|\$\$|\||<|(?:[-*_][ \t]*){3,}$)/;
 
 /**
  * Footnotes: `[^id]` references and `[^id]: text` definitions. A definition runs to

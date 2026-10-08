@@ -1,5 +1,6 @@
 **
 !dist/extension.js
+!dist/export.js
 !dist/webview.js
 !dist/webview.css
 !package.json
