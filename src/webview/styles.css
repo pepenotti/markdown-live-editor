@@ -12,6 +12,7 @@ body {
   --mdl-dim: var(--vscode-descriptionForeground, #656d76);
   --mdl-border: var(--vscode-editorWidget-border, var(--vscode-panel-border, #d0d7de));
   --mdl-link: var(--vscode-textLink-foreground, #0969da);
+  --mdl-problem: var(--vscode-editorWarning-foreground, #bf8803);
   --mdl-code-bg: var(--vscode-textCodeBlock-background, rgba(129, 139, 152, 0.14));
   --mdl-quote: var(--vscode-textBlockQuote-border, #c5ccd3);
   --mdl-selection: var(--vscode-editor-selectionBackground, #b6d6fd);
@@ -375,13 +376,27 @@ body {
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
-/* A wiki link to a note that does not exist yet. */
-#app .cm-md-wikilink-missing {
-  color: var(--mdl-dim);
-  text-decoration-style: dashed;
-}
 #app .cm-md-url {
   word-break: break-all;
+}
+/* A link whose file, heading or definition does not exist; the reason is its tooltip. */
+#app .cm-md-broken-link {
+  text-decoration: underline wavy var(--mdl-problem);
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+/* A wiki link to a note that does not exist yet: dim and dashed rather than wavy. */
+#app .cm-md-broken-link.cm-md-missing-note {
+  color: var(--mdl-dim);
+  text-decoration: underline dashed var(--mdl-dim);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+/* One underline, not the link's straight one on top of the wavy one. */
+#app .cm-md-link:has(.cm-md-broken-link),
+#app .cm-md-broken-link .cm-md-link {
+  text-decoration: none;
 }
 
 #app .cm-md-quote {
@@ -591,6 +606,35 @@ body {
   height: auto;
   border-radius: 4px;
 }
+#app .cm-md-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+#app .cm-md-image-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--mdl-bg, #fff);
+  border-radius: 4px 0 4px 0;
+  background: var(--mdl-accent);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+#app .cm-md-image-frame:hover .cm-md-image-handle,
+#app .cm-md-image-resizing .cm-md-image-handle {
+  opacity: 1;
+}
+#app .cm-md-image-resizing img {
+  outline: 1px solid var(--mdl-accent);
+}
+#app .cm-md-image-error .cm-md-image-frame {
+  display: none;
+}
 #app .cm-md-image-missing {
   display: none;
 }
@@ -614,6 +658,7 @@ body {
   padding: 6px var(--mdl-line-pad) 8px;
 }
 #app .cm-md-table-scroll {
+  container-type: inline-size;
   overflow-x: auto;
 }
 #app .cm-md-table {
@@ -638,13 +683,25 @@ body {
   min-height: 1.5em;
   outline: none;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  /* Long text wraps instead of making its column push the others aside: a cell is at most
+     34em wide, and at most 60% of the editor when that is less. Words stay whole unless one
+     is wider than that; a table with too many columns to fit scrolls sideways. */
+  max-width: 34em;
+  max-width: min(34em, 60cqw);
+  word-break: normal;
+  overflow-wrap: break-word;
   cursor: text;
 }
 #app .cm-md-cell:focus {
   box-shadow: inset 0 0 0 2px var(--mdl-accent);
 }
+/* What cannot wrap, such as a long formula, scrolls inside its cell instead of covering the next one. */
+#app .cm-md-cell:not(.cm-md-cell-editing) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 #app .cm-md-cell-image {
+  max-width: 100%;
   max-height: 3em;
   vertical-align: middle;
 }
@@ -666,19 +723,27 @@ body {
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
+  width: max-content;
 }
 #app .cm-md-table-active .cm-md-table-tools {
   display: flex;
 }
+#app .cm-md-table-tools-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+#app .cm-md-table-tools [hidden] {
+  display: none;
+}
+#app .cm-md-table-tools-group:not([hidden]) ~ .cm-md-table-tools-group {
+  margin-left: 4px;
+  padding-left: 4px;
+  border-left: 1px solid var(--mdl-border);
+}
 #app .cm-md-table-tools-label {
   color: var(--mdl-dim);
   padding: 0 3px 0 2px;
-}
-#app .cm-md-table-tools-sep {
-  width: 1px;
-  height: 14px;
-  margin: 0 4px;
-  background: var(--mdl-border);
 }
 #app .cm-md-table-tools button {
   font: inherit;
@@ -691,8 +756,112 @@ body {
   border-radius: 3px;
   cursor: pointer;
 }
-#app .cm-md-table-tools button:hover {
+#app .cm-md-table-tools button:hover,
+#app .cm-md-table-tools button[aria-expanded='true'] {
   background: var(--mdl-hover);
+}
+#app .cm-md-table-tools button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px var(--mdl-accent);
+}
+#app .cm-md-table-tools button[aria-disabled='true'],
+#app .cm-md-table-menu button[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: default;
+  background: none;
+}
+#app .cm-md-table-menu {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  min-width: 232px;
+  max-width: calc(100vw - 12px);
+  max-height: calc(100vh - 12px);
+  overflow: auto;
+  padding: 4px;
+  background: var(--mdl-widget);
+  color: var(--mdl-fg);
+  border: 1px solid var(--mdl-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-family: var(--mdl-font);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+#app .cm-md-table-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+#app .cm-md-table-menu-label {
+  flex: 1;
+  padding: 0 14px 0 8px;
+}
+#app .cm-md-table-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--mdl-border);
+}
+#app .cm-md-table-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font: inherit;
+  color: inherit;
+  min-width: 46px;
+  height: 24px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#app .cm-md-table-menu-row > .cm-md-table-menu-label ~ button {
+  box-shadow: inset 0 0 0 1px var(--mdl-border);
+  height: 20px;
+  margin: 2px 0;
+}
+#app .cm-md-table-menu button.cm-md-table-menu-wide {
+  flex: 1;
+  justify-content: space-between;
+}
+#app .cm-md-table-menu button:not([aria-disabled='true']):hover,
+#app .cm-md-table-menu button.cm-md-table-menu-current {
+  background: var(--mdl-hover);
+}
+#app .cm-md-table-menu button[aria-checked='true'] {
+  box-shadow: inset 0 0 0 1px var(--mdl-accent);
+  color: var(--mdl-accent);
+}
+#app .cm-md-table-menu button.cm-md-table-menu-current {
+  box-shadow: inset 0 0 0 1px var(--mdl-accent);
+}
+#app .cm-md-table-menu-hint {
+  color: var(--mdl-dim);
+}
+#app .cm-md-table-menu button.cm-md-table-danger {
+  color: var(--vscode-errorForeground, #cf222e);
+}
+
+/* ---------- footnotes ---------- */
+#app .cm-md-footnote-ref {
+  color: var(--mdl-link);
+  font-size: 0.75em;
+  line-height: 0;
+  padding: 0 1px;
+}
+#app .cm-md-footnote {
+  font-size: 0.88em;
+  color: var(--mdl-dim);
+}
+#app .cm-md-footnote-label {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 0.3em;
+  color: var(--mdl-link);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- popovers, completion, search ---------- */
@@ -739,6 +908,15 @@ body {
 }
 #app .cm-md-popover-note {
   color: var(--mdl-dim);
+}
+#app .cm-md-popover [hidden] {
+  display: none;
+}
+#app .cm-md-popover input[data-field='tex'] {
+  font-family: var(--mdl-mono);
+}
+#app .cm-md-popover input[aria-invalid='true'] {
+  border-color: var(--vscode-inputValidation-errorBorder, #d1242f);
 }
 #app .cm-md-popover-actions {
   display: flex;

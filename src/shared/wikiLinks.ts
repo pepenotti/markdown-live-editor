@@ -62,6 +62,27 @@ export function formatWikiLink(parts: WikiLinkParts): string {
   return `[[${target}${heading ? '#' + heading : ''}${alias ? '|' + alias : ''}]]`;
 }
 
+const RESERVED_NAME = /^(?:con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3])(?:\.|$)/i;
+
+/**
+ * The file name for a new note called `name`, or null when the name must not become a file.
+ * The name comes from the text of a document, so it is taken as one plain file name and
+ * nothing else: no folders, no `..`, no absolute path, no drive, no hidden file, nothing a
+ * file system reserves or mangles.
+ */
+export function newNoteFileName(name: string): string | null {
+  const n = name.trim();
+  if (n === '' || n.length > 200) return null;
+  if (/[\/\\<>:"|?*\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(n)) return null;
+  if (n.startsWith('.') || /[. ]$/.test(n)) return null;
+  if (RESERVED_NAME.test(n)) return null;
+  return isNotePath(n) ? n : `${n}.md`;
+}
+
+function inside(path: string, roots: readonly string[]): boolean {
+  return roots.some((root) => path.startsWith(root.replace(/\/+$/, '') + '/'));
+}
+
 export type NoteStatus = 'found' | 'missing' | 'ambiguous';
 
 export type Resolution = { status: 'found'; path: string } | { status: 'missing' } | { status: 'ambiguous'; paths: string[] };
@@ -114,30 +135,45 @@ export class NoteSet {
   }
 
   /**
+   * The files a name could be when read as a relative path, best first: from the note's
+   * folder, then from its own root (the first one). Only paths inside the roots; `../` cannot lead out of them.
+   */
+  static exactPaths(name: string, fromPath: string, roots: readonly string[]): string[] {
+    const wanted = name.trim().replace(/\\/g, '/');
+    const relative = wanted.replace(/^\/+/, '');
+    if (!relative) return [];
+    const out: string[] = [];
+    // Only the note's own root: a file that happens to sit at the top of another workspace folder is found by its name, like any other.
+    for (const base of wanted.startsWith('/') ? roots.slice(0, 1) : [dirName(fromPath), ...roots.slice(0, 1)]) {
+      const exact = joinPath(base, relative);
+      for (const path of isNotePath(relative) ? [exact] : NOTE_EXTENSIONS.map((ext) => `${exact}.${ext}`)) {
+        if (inside(path, roots) && !out.includes(path)) out.push(path);
+      }
+    }
+    return out;
+  }
+
+  /**
    * Finds the file a note name stands for, seen from the note at `fromPath`:
    * an exact relative path first (from the note's folder, then from a root folder),
    * then the only file with that name, compared without case and extension. When
    * several files share the name, the one in the note's own folder wins.
+   *
+   * `roots` are the folders the note belongs to: its own workspace folder first, then the
+   * other workspace folders, or just its own folder when it is outside the workspace.
+   * Nothing outside them is ever returned.
    */
   resolve(name: string, fromPath: string, roots: readonly string[]): Resolution {
-    const wanted = name.trim().replace(/\\/g, '/');
-    const relative = wanted.replace(/^\/+/, '');
+    const relative = name.trim().replace(/\\/g, '/').replace(/^\/+/, '');
     if (!relative) return { status: 'missing' };
     const fromDir = dirName(fromPath);
     const hasExtension = isNotePath(relative);
 
-    for (const base of wanted.startsWith('/') ? roots : [fromDir, ...roots]) {
-      const exact = joinPath(base, relative);
-      if (hasExtension) {
-        if (this.paths.has(exact)) return { status: 'found', path: exact };
-      } else {
-        for (const ext of NOTE_EXTENSIONS) if (this.paths.has(`${exact}.${ext}`)) return { status: 'found', path: `${exact}.${ext}` };
-      }
-    }
+    for (const exact of NoteSet.exactPaths(name, fromPath, roots)) if (this.paths.has(exact)) return { status: 'found', path: exact };
 
     const stem = stripNoteExtension(relative).toLowerCase();
     const extension = hasExtension ? relative.slice(relative.lastIndexOf('.')).toLowerCase() : '';
-    let candidates = [...(this.byName.get(baseName(stem)) ?? [])];
+    let candidates = [...(this.byName.get(baseName(stem)) ?? [])].filter((p) => inside(p, roots));
     if (stem.includes('/')) candidates = candidates.filter((p) => stripNoteExtension(p).toLowerCase().endsWith('/' + stem));
     if (extension) candidates = candidates.filter((p) => p.toLowerCase().endsWith(extension));
     if (candidates.length === 0) return { status: 'missing' };
@@ -148,11 +184,27 @@ export class NoteSet {
   }
 
   /** The shortest name that leads to this note: its file name, or its path when the name is taken twice. */
-  nameOf(path: string, root: string): string {
+  nameOf(path: string, roots: readonly string[]): string {
     const stem = stripNoteExtension(path);
-    if ((this.byName.get(NoteSet.key(path))?.size ?? 0) <= 1) return baseName(stem);
-    const prefix = root.replace(/\/+$/, '') + '/';
-    return stem.startsWith(prefix) ? stem.slice(prefix.length) : baseName(stem);
+    const same = [...(this.byName.get(NoteSet.key(path)) ?? [])].filter((p) => inside(p, roots));
+    if (same.length <= 1) return baseName(stem);
+    for (const root of roots) {
+      const prefix = root.replace(/\/+$/, '') + '/';
+      if (stem.startsWith(prefix)) return stem.slice(prefix.length);
+    }
+    return baseName(stem);
+  }
+
+  /** The known notes inside these folders. */
+  *within(roots: readonly string[]): IterableIterator<string> {
+    for (const path of this.paths) if (inside(path, roots)) yield path;
+  }
+
+  /** Forgets the notes inside a folder that was deleted. Returns how many there were. */
+  deleteFolder(folder: string): number {
+    const gone = [...this.within([folder])];
+    for (const path of gone) this.delete(path);
+    return gone.length;
   }
 }
 
@@ -171,7 +223,9 @@ export interface ScannedNote {
   headings: string[];
 }
 
-const WIKI = /\[\[([^\[\]\n]+)\]\]/g;
+/** A file with more links than this is a generated list, not a note; the rest is not kept. */
+export const MAX_LINKS_PER_NOTE = 2000;
+const WIKI = /\[\[(?!\^)([^\[\]\n]+)\]\]/g;
 const INLINE_TARGET = /\]\(\s*(<[^>\n]*>|[^)\s]+)/g;
 const DEFINITION = /^ {0,3}\[[^\]]+\]:\s*(<[^>\n]*>|\S+)/;
 const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
@@ -214,7 +268,7 @@ export function scanNote(text: string): ScannedNote {
     if (fence !== null) continue;
     const h = HEADING.exec(raw);
     if (h) out.headings.push(h[2].replace(/[*_`~]/g, '').trim());
-    if (!raw.includes('[')) continue;
+    if (!raw.includes('[') || out.links.length >= MAX_LINKS_PER_NOTE) continue;
     // Inline code is blanked out so links inside it do not count.
     const line = raw.replace(/(`+)[^`]*?\1/g, (m) => ' '.repeat(m.length));
     const before = out.links.length;
@@ -240,7 +294,8 @@ export function linkLeadsTo(link: NoteLink, fromPath: string, targetPath: string
     const found = notes.resolve(link.target, fromPath, roots);
     return found.status === 'found' && found.path === targetPath;
   }
-  if (link.target.startsWith('/')) return roots.some((root) => joinPath(root, link.target) === targetPath);
+  // As the editor opens it: from the workspace folder of the linking note.
+  if (link.target.startsWith('/')) return roots.length > 0 && joinPath(roots[0], link.target) === targetPath;
   return joinPath(dirName(fromPath), link.target) === targetPath;
 }
 

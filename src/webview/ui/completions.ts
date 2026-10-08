@@ -61,6 +61,7 @@ const SLASH: SlashItem[] = [
   { name: 'image', label: 'Image', detail: 'choose a file', action: 'image' },
   { name: 'link', label: 'Link', detail: '[text](url)', command: insertLink },
   { name: 'divider', label: 'Divider', detail: '---', command: insertRule },
+  { name: 'toc', label: 'Table of contents', detail: 'links to the headings', action: 'toc' },
 ];
 
 function slashSource(run: (id: CommandId) => void) {
@@ -127,7 +128,7 @@ function applyWikiName(view: EditorView, text: string, from: number, to: number)
 }
 
 /** After `[[`: the notes of the workspace, and after `[[Note#` the headings of that note. */
-function wikiSource(host: HostBridge, enabled: () => boolean) {
+export function wikiSource(host: Pick<HostBridge, 'request'>, enabled: () => boolean) {
   const cache = new Map<string, { at: number; items: Promise<{ label: string; detail?: string }[]> }>();
   const cached = (key: string, load: () => Promise<{ label: string; detail?: string }[]>) => {
     const hit = cache.get(key);

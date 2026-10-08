@@ -6,14 +6,26 @@
 import { foldable, foldedRanges, syntaxTree } from '@codemirror/language';
 import { type EditorState, type Range, RangeSet, RangeValue } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import type { SyntaxNode, Tree } from '@lezer/common';
+import type { SyntaxNode } from '@lezer/common';
 import { renderConfig } from '../config';
-import { stripUrl } from '../inlineRender';
-import { texOf } from '../markdown';
+import { getAttr, imgTags, isLoneImg } from '../htmlTag';
+import { footnotes, linkInfo } from '../links';
+import { footnoteId, texOf } from '../markdown';
 import { modeField, refreshDecorations } from '../modes';
-import { noteStatus, wikiLinkInfo } from '../wikiLinks';
+import { wikiLinkInfo } from '../wikiLinks';
 import { MathWidget } from '../widgets/rendered';
-import { AlertLabelWidget, CheckboxWidget, CodeHeaderWidget, FoldWidget, ImageWidget, isFoldedAt, RuleWidget } from '../widgets/simple';
+import {
+  AlertLabelWidget,
+  CheckboxWidget,
+  CodeHeaderWidget,
+  FoldWidget,
+  FootnoteWidget,
+  ImageWidget,
+  isFoldedAt,
+  RuleWidget,
+} from '../widgets/simple';
+
+export { footnoteAt, footnotes, type LinkInfo, linkInfo } from '../links';
 
 /** inline: marker inside a line. leading: marker at the start of a line. line: a whole hidden line. */
 export type AtomKind = 'inline' | 'leading' | 'line';
@@ -67,75 +79,6 @@ const ALERT = /^\[!(note|tip|important|warning|caution)\]$/i;
 /** "[ ]" is three characters in the source; the checkbox drawn for it is two wide (see .cm-md-checkbox). */
 const CHECKBOX_SOURCE_WIDTH = 3;
 const CHECKBOX_WIDTH = 2;
-const IMG_TAG = /<img\b[^>]*>/gi;
-
-function attr(tag: string, name: string): string {
-  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
-  return m ? (m[1] ?? m[2] ?? m[3] ?? '') : '';
-}
-
-export function normalizeLabel(label: string): string {
-  return label.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-const definitionCache = new WeakMap<Tree, Map<string, string>>();
-
-/** Reference definitions (`[label]: url`) of the document. */
-export function linkDefinitions(state: EditorState): Map<string, string> {
-  const tree = syntaxTree(state);
-  let defs = definitionCache.get(tree);
-  if (defs) return defs;
-  defs = new Map();
-  const found = defs;
-  tree.iterate({
-    enter(node) {
-      if (node.name === 'LinkReference') {
-        const label = node.node.getChild('LinkLabel');
-        const url = node.node.getChild('URL');
-        if (label && url) {
-          const key = normalizeLabel(state.doc.sliceString(label.from + 1, label.to - 1));
-          if (!found.has(key)) found.set(key, stripUrl(state.doc.sliceString(url.from, url.to)));
-        }
-        return false;
-      }
-      return node.name === 'Document' || node.name === 'Blockquote' || node.name.endsWith('List') || node.name === 'ListItem';
-    },
-  });
-  definitionCache.set(tree, defs);
-  return defs;
-}
-
-export interface LinkInfo {
-  /** Target, or null when the brackets are not a link at all. */
-  href: string | null;
-  /** Range of the visible text between the brackets. */
-  textFrom: number;
-  textTo: number;
-  url: SyntaxNode | null;
-  /** True for `[text](url)`, false for reference links. */
-  inline: boolean;
-}
-
-/** Works out the target of a Link or Image node. */
-export function linkInfo(state: EditorState, node: SyntaxNode): LinkInfo | null {
-  const marks = node.getChildren('LinkMark');
-  if (marks.length < 2) return null;
-  const doc = state.doc;
-  const url = node.getChild('URL');
-  const inline = marks.length >= 3;
-  const textFrom = marks[0].to;
-  const textTo = marks[1].from;
-  let href: string | null;
-  if (inline) {
-    href = url ? stripUrl(doc.sliceString(url.from, url.to)) : '';
-  } else {
-    const label = node.getChild('LinkLabel');
-    const explicit = label ? doc.sliceString(label.from + 1, label.to - 1) : '';
-    const key = normalizeLabel(explicit || doc.sliceString(textFrom, textTo));
-    href = linkDefinitions(state).get(key) ?? null;
-  }
-  return { href, textFrom, textTo, url, inline };
-}
 
 /**
  * Builds the decorations for the given ranges of the document.
@@ -150,7 +93,6 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
   const cfg = state.facet(renderConfig);
   const selection = state.selection.ranges;
   const decos = out.decorations;
-  const notes = state.field(noteStatus, false);
 
   const touches = (from: number, to: number) => !full && selection.some((r) => r.from <= to && r.to >= from);
   const lineActive = (pos: number) => {
@@ -345,12 +287,36 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
             return false;
           }
 
+          case 'FootnoteReference': {
+            const n = footnotes(state).numbers.get(footnoteId(doc.sliceString(from, to)));
+            if (n === undefined) return false;
+            if (touches(from, to)) mark('cm-md-mark', from, to);
+            else {
+              decos.push(Decoration.replace({ widget: new FootnoteWidget(String(n), true) }).range(from, to));
+              atom(from, to, 'inline');
+            }
+            return false;
+          }
+
+          case 'FootnoteDefinition':
+            eachLine(from, to, (lineFrom) => decos.push(lineDeco('cm-md-footnote').range(lineFrom)));
+            return true;
+
+          case 'FootnoteLabel': {
+            if (lineActive(from)) mark('cm-md-mark', from, to);
+            else {
+              const id = footnoteId(doc.sliceString(from, to));
+              const end = doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
+              const n = footnotes(state).numbers.get(id);
+              decos.push(Decoration.replace({ widget: new FootnoteWidget(n === undefined ? id : String(n), false) }).range(from, end));
+              atom(from, end, 'leading');
+            }
+            return false;
+          }
+
           case 'WikiLink': {
             const info = wikiLinkInfo(doc, from, to);
-            // Until the host has answered, a link is drawn as if its note exists.
-            const status = info.target ? notes?.get(info.target) : 'found';
-            const title = status === 'missing' ? `${info.target} (no such note yet)` : status === 'ambiguous' ? `${info.target} (several notes match)` : info.target || `#${info.heading}`;
-            mark('cm-md-link cm-md-wikilink' + (status === 'missing' ? ' cm-md-wikilink-missing' : ''), info.shownFrom, info.shownTo, title);
+            mark('cm-md-link cm-md-wikilink', info.shownFrom, info.shownTo, info.target || `#${info.heading}`);
             if (touches(from, to)) {
               mark('cm-md-mark', from, from + 2);
               mark('cm-md-mark cm-md-url', from + 2, info.shownFrom);
@@ -427,16 +393,20 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
 
           case 'HTMLBlock':
           case 'HTMLTag': {
-            if (name === 'HTMLBlock') eachLine(from, to, (lineFrom) => decos.push(lineDeco('cm-md-html').range(lineFrom)));
-            else mark('cm-md-html', from, to);
             const text = doc.sliceString(from, to);
-            IMG_TAG.lastIndex = 0;
-            for (let m = IMG_TAG.exec(text); m; m = IMG_TAG.exec(text)) {
-              const src = attr(m[0], 'src');
+            // A tag that is only an image behaves like a Markdown image: the picture stands in for it.
+            const lone = isLoneImg(text) && getAttr(text, 'src') !== '';
+            const shown = !lone || touches(from, to);
+            if (!shown) hide(from, to);
+            else if (name === 'HTMLBlock') eachLine(from, to, (lineFrom) => decos.push(lineDeco('cm-md-html').range(lineFrom)));
+            else mark('cm-md-html', from, to);
+            const re = imgTags();
+            for (let m = re.exec(text); m; m = re.exec(text)) {
+              const src = getAttr(m[0], 'src');
               const end = from + m.index + m[0].length;
               if (src && end >= range.from && end <= range.to) {
-                const widget = new ImageWidget(src, cfg.resolveUrl(src), attr(m[0], 'alt'), attr(m[0], 'title'), true, attr(m[0], 'width'));
-                decos.push(Decoration.widget({ widget, side: -1 }).range(end));
+                const widget = new ImageWidget(src, cfg.resolveUrl(src), getAttr(m[0], 'alt'), getAttr(m[0], 'title'), shown, getAttr(m[0], 'width'));
+                decos.push(Decoration.widget({ widget, side: lone && !full ? 1 : -1 }).range(end));
               }
             }
             return false;
@@ -610,10 +580,7 @@ export const inlinePlugin = ViewPlugin.fromClass(
       const modeChanged = u.startState.field(modeField) !== mode;
       const forced = u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshDecorations)));
       const treeChanged = syntaxTree(u.startState) !== syntaxTree(u.state);
-      const configChanged =
-        u.startState.facet(renderConfig) !== u.state.facet(renderConfig) ||
-        foldedRanges(u.startState) !== foldedRanges(u.state) ||
-        u.startState.field(noteStatus, false) !== u.state.field(noteStatus, false);
+      const configChanged = u.startState.facet(renderConfig) !== u.state.facet(renderConfig) || foldedRanges(u.startState) !== foldedRanges(u.state);
       // Only half preview depends on where the cursor is.
       const selectionMatters = u.selectionSet && mode === 'half';
       if (u.docChanged || u.viewportChanged || modeChanged || forced || treeChanged || configChanged || selectionMatters) this.build(u.view);

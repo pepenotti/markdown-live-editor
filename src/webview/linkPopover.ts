@@ -1,5 +1,5 @@
-// Full preview hides link and image syntax, so a small popover next to the cursor
-// shows the target and lets it be edited.
+// Full preview hides the syntax of links, images and inline math, so a small popover
+// next to the cursor shows what is hidden and lets it be edited.
 import { completionStatus } from '@codemirror/autocomplete';
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, StateField } from '@codemirror/state';
@@ -7,26 +7,35 @@ import { type EditorView, showTooltip, type Tooltip, type TooltipView } from '@c
 import type { SyntaxNode } from '@lezer/common';
 import { encodeLinkPath } from './commands/format';
 import { hostActions } from './config';
-import { linkInfo, type LinkInfo } from './decorations/inline';
+import { getAttr, isLoneImg, setAttr } from './htmlTag';
+import { linkInfo, type LinkInfo } from './links';
+import { texOf, withTex } from './markdown';
 import { modeField } from './modes';
 import { formatWikiLink, parseWikiLink } from '../shared/wikiLinks';
-import { noteStatus, wikiLinkAt, type WikiLinkInfo } from './wikiLinks';
+import { findingReason } from './linkCheck';
+import { wikiLinkAt, type WikiLinkInfo } from './wikiLinks';
 
-interface Target {
-  node: SyntaxNode;
-  kind: 'link' | 'image';
-  info: LinkInfo;
-}
+export type Target =
+  | { kind: 'link' | 'image'; from: number; to: number; node: SyntaxNode; info: LinkInfo }
+  /** An image written as an `<img>` tag. */
+  | { kind: 'tag'; from: number; to: number; tag: string }
+  | { kind: 'math'; from: number; to: number; source: string };
 
-/** The link whose text contains `pos`, or the image right next to it. */
-export function linkTargetAt(state: EditorState, pos: number): Target | null {
+/** The link whose text contains `pos`, or the image or formula right next to it. */
+export function popoverTargetAt(state: EditorState, pos: number): Target | null {
   for (const side of [-1, 1] as const) {
     for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, side); n; n = n.parent) {
+      if (n.name === 'InlineMath') return { kind: 'math', from: n.from, to: n.to, source: state.doc.sliceString(n.from, n.to) };
+      if (n.name === 'HTMLTag' || n.name === 'HTMLBlock') {
+        const tag = state.doc.sliceString(n.from, n.to);
+        if (isLoneImg(tag) && getAttr(tag, 'src') !== '') return { kind: 'tag', from: n.from, to: n.to, tag };
+        continue;
+      }
       if (n.name !== 'Link' && n.name !== 'Image') continue;
       const info = linkInfo(state, n);
       if (!info || info.href === null) continue;
-      if (n.name === 'Image') return { node: n, kind: 'image', info };
-      if (pos >= info.textFrom && pos <= info.textTo) return { node: n, kind: 'link', info };
+      if (n.name === 'Image') return { kind: 'image', from: n.from, to: n.to, node: n, info };
+      if (pos >= info.textFrom && pos <= info.textTo) return { kind: 'link', from: n.from, to: n.to, node: n, info };
     }
   }
   return null;
@@ -39,9 +48,9 @@ function compute(state: EditorState): Tooltip | null {
   const wiki = wikiTargetAt(state, sel.head);
   // While note names are being offered, the list takes the place of the popover.
   if (wiki) return completionStatus(state) === null ? { pos: wiki.from, end: wiki.to, above: false, arrow: false, create: createWikiPopover } : null;
-  const target = linkTargetAt(state, sel.head);
+  const target = popoverTargetAt(state, sel.head);
   if (!target) return null;
-  return { pos: target.node.from, end: target.node.to, above: false, arrow: false, create: createPopover };
+  return { pos: target.from, end: target.to, above: false, arrow: false, create: createPopover };
 }
 
 export const popoverField = StateField.define<Tooltip | null>({
@@ -61,28 +70,61 @@ export const popoverField = StateField.define<Tooltip | null>({
 });
 
 function current(view: EditorView): Target | null {
-  return linkTargetAt(view.state, view.state.selection.main.head);
+  return popoverTargetAt(view.state, view.state.selection.main.head);
+}
+
+interface Change {
+  from: number;
+  to: number;
+  insert: string;
+}
+
+/** Replaces `before` (at `from`) by `after`, touching only the part that differs so the cursor stays put. */
+function replaceText(from: number, before: string, after: string): Change | null {
+  if (before === after) return null;
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+  return { from: from + start, to: from + before.length - end, insert: after.slice(start, after.length - end) };
+}
+
+/** The change that points a link or image at another target. Reference links change their definition. */
+export function urlChange(state: EditorState, t: Target, value: string): Change | null {
+  if (t.kind === 'math') return null;
+  if (t.kind === 'tag') return replaceText(t.from, t.tag, setAttr(t.tag, 'src', value.trim()));
+  const encoded = encodeLinkPath(value.trim());
+  if (!t.info.inline) {
+    const def = t.info.definition;
+    // A definition needs something after the colon; `<>` is an empty target.
+    return def ? replaceText(def.from, state.doc.sliceString(def.from, def.to), encoded || '<>') : null;
+  }
+  if (t.info.url) return { from: t.info.url.from, to: t.info.url.to, insert: encoded };
+  const open = t.node.getChildren('LinkMark')[2];
+  return open ? { from: open.to, to: open.to, insert: encoded } : null;
+}
+
+/** The change that puts other TeX between the dollar signs, or null when it would not be a formula. */
+export function texChange(t: Target, value: string): Change | null {
+  if (t.kind !== 'math') return null;
+  const next = withTex(t.source, value);
+  return next === null ? null : replaceText(t.from, t.source, next);
+}
+
+function edit(view: EditorView, change: Change | null): void {
+  if (change) view.dispatch({ changes: change, userEvent: 'input.type' });
 }
 
 function setUrl(view: EditorView, value: string): void {
   const t = current(view);
-  if (!t || !t.info.inline) return;
-  const encoded = encodeLinkPath(value.trim());
-  if (t.info.url) {
-    view.dispatch({ changes: { from: t.info.url.from, to: t.info.url.to, insert: encoded }, userEvent: 'input.type' });
-    return;
-  }
-  const open = t.node.getChildren('LinkMark')[2];
-  if (open) view.dispatch({ changes: { from: open.to, insert: encoded }, userEvent: 'input.type' });
+  if (t) edit(view, urlChange(view.state, t, value));
 }
 
 function setAlt(view: EditorView, value: string): void {
   const t = current(view);
-  if (!t) return;
-  view.dispatch({
-    changes: { from: t.info.textFrom, to: t.info.textTo, insert: value.replace(/[\[\]\n]/g, ' ') },
-    userEvent: 'input.type',
-  });
+  if (!t || t.kind === 'math') return;
+  if (t.kind === 'tag') edit(view, replaceText(t.from, t.tag, setAttr(t.tag, 'alt', value.replace(/\n/g, ' '))));
+  else edit(view, { from: t.info.textFrom, to: t.info.textTo, insert: value.replace(/[\[\]\n]/g, ' ') });
 }
 
 function remove(view: EditorView): void {
@@ -90,8 +132,8 @@ function remove(view: EditorView): void {
   if (!t) return;
   const insert = t.kind === 'link' ? view.state.doc.sliceString(t.info.textFrom, t.info.textTo) : '';
   view.dispatch({
-    changes: { from: t.node.from, to: t.node.to, insert },
-    selection: { anchor: t.node.from + insert.length },
+    changes: { from: t.from, to: t.to, insert },
+    selection: { anchor: t.from + insert.length },
     userEvent: 'input.format',
   });
   view.focus();
@@ -121,11 +163,14 @@ function button(label: string, title: string, run: () => void): HTMLButtonElemen
   return b;
 }
 
+const REMOVE_LABEL: Record<Target['kind'], string> = { link: 'Remove link', image: 'Remove image', tag: 'Remove image', math: 'Remove formula' };
+
 function createPopover(view: EditorView): TooltipView {
   const dom = document.createElement('div');
   dom.className = 'cm-md-popover';
   const alt = field('Alt text', 'alt', 'Describe the image');
   const url = field('Link', 'url', 'https://… or a file path');
+  const tex = field('TeX', 'tex', 'x^2 + y^2');
   const note = document.createElement('div');
   note.className = 'cm-md-popover-note';
   const actions = document.createElement('div');
@@ -133,7 +178,7 @@ function createPopover(view: EditorView): TooltipView {
 
   const open = button('Open', 'Open the link', () => {
     const t = current(view);
-    if (t?.info.href) view.state.facet(hostActions).openLink(t.info.href);
+    if (t?.kind === 'link' && t.info.href) view.state.facet(hostActions).openLink(t.info.href);
   });
   const browse = button('Choose file…', 'Choose an image file', () => {
     void view.state
@@ -145,11 +190,23 @@ function createPopover(view: EditorView): TooltipView {
   });
   const del = button('Remove', 'Remove', () => remove(view));
   actions.append(open, browse, del);
-  dom.append(alt.row, url.row, note, actions);
+  dom.append(alt.row, url.row, tex.row, note, actions);
 
   url.input.addEventListener('input', () => setUrl(view, url.input.value));
   alt.input.addEventListener('input', () => setAlt(view, alt.input.value));
-  for (const input of [url.input, alt.input]) {
+  tex.input.addEventListener('input', () => {
+    const t = current(view);
+    if (!t) return;
+    const valid = withTex('$', tex.input.value) !== null;
+    tex.input.setAttribute('aria-invalid', String(!valid));
+    edit(view, texChange(t, tex.input.value));
+    render();
+  });
+  tex.input.addEventListener('blur', () => {
+    tex.input.setAttribute('aria-invalid', 'false');
+    render();
+  });
+  for (const input of [url.input, alt.input, tex.input]) {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
@@ -162,18 +219,30 @@ function createPopover(view: EditorView): TooltipView {
   const render = () => {
     const t = current(view);
     if (!t) return;
-    const image = t.kind === 'image';
+    const image = t.kind === 'image' || t.kind === 'tag';
+    const math = t.kind === 'math';
+    const reference = (t.kind === 'link' || t.kind === 'image') && !t.info.inline;
     dom.dataset.kind = t.kind;
     alt.row.hidden = !image;
-    browse.hidden = !image || !t.info.inline;
-    open.hidden = image;
-    del.textContent = image ? 'Remove image' : 'Remove link';
+    url.row.hidden = math;
+    tex.row.hidden = !math;
+    browse.hidden = !image;
+    open.hidden = t.kind !== 'link';
+    del.textContent = REMOVE_LABEL[t.kind];
     url.row.firstElementChild!.textContent = image ? 'Image' : 'Link';
-    url.input.readOnly = !t.info.inline;
-    note.hidden = t.info.inline;
-    note.textContent = 'Defined elsewhere in the document as a reference; switch to half preview to edit it.';
-    if (document.activeElement !== url.input) url.input.value = t.info.href ?? '';
-    if (document.activeElement !== alt.input) alt.input.value = view.state.doc.sliceString(t.info.textFrom, t.info.textTo);
+    const invalid = math && tex.input.getAttribute('aria-invalid') === 'true';
+    note.hidden = !reference && !invalid;
+    if (invalid) note.textContent = 'A formula cannot be empty, contain a $ or end with a backslash. The document keeps the last valid one.';
+    else if (reference) note.textContent = 'This is a reference: editing it changes its definition, which other links may share.';
+    const active = document.activeElement;
+    if (t.kind === 'math') {
+      if (active !== tex.input) tex.input.value = texOf(t.source);
+      return;
+    }
+    const href = t.kind === 'tag' ? getAttr(t.tag, 'src') : (t.info.href ?? '');
+    const text = t.kind === 'tag' ? getAttr(t.tag, 'alt') : view.state.doc.sliceString(t.info.textFrom, t.info.textTo);
+    if (active !== url.input) url.input.value = href;
+    if (active !== alt.input) alt.input.value = text;
   };
   render();
   return { dom, update: render };
@@ -240,9 +309,10 @@ function createWikiPopover(view: EditorView): TooltipView {
   const render = () => {
     const t = here();
     if (!t) return;
-    const status = t.target ? view.state.field(noteStatus, false)?.get(t.target) : 'found';
-    open.textContent = status === 'missing' ? 'Create note' : 'Open';
-    open.title = status === 'missing' ? 'Create this note and open it' : 'Open the note';
+    // Known from the link checker. With link checking off the button says Open and the host still asks before creating.
+    const missing = findingReason(view.state, t.from, t.to) === 'note';
+    open.textContent = missing ? 'Create note' : 'Open';
+    open.title = missing ? 'Create this note and open it' : 'Open the note';
     if (document.activeElement !== note.input) note.input.value = t.target + (t.heading ? '#' + t.heading : '');
     if (document.activeElement !== text.input) text.input.value = t.alias;
   };

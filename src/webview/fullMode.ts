@@ -110,7 +110,7 @@ function enterTable(dir: 1 | -1): Command {
 /**
  * Keeps the cursor out of places where typing would go wrong:
  * - on or inside a rendered table or collapsed front matter (the browser would put
- *   the typed text on a neighbouring line),
+ *   the typed text on a neighbouring line) and on a hidden table of contents marker,
  * - in full preview, in front of a hidden line-start marker (typing there would turn
  *   "## Title" into "x## Title") and on hidden code fence lines.
  * The cursor continues in the direction it was moving.
@@ -140,7 +140,7 @@ const keepCursorSensible = EditorView.updateListener.of((update) => {
       const after = p.to < state.doc.length ? p.to + 1 : -1;
       const before = p.from > 0 ? p.from - 1 : -1;
       const kind = p.value.kind;
-      if (kind === 'table' || kind === 'frontmatter' || kind === 'rendered') {
+      if (kind === 'table' || kind === 'frontmatter' || kind === 'rendered' || kind === 'hidden') {
         const next = forward ? (after >= 0 ? after : before) : before >= 0 ? before : after;
         if (next >= 0) pos = next;
       } else if (forward) {

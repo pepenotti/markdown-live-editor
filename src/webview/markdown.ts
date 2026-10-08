@@ -1,141 +1,35 @@
 // Markdown language configuration: CommonMark + GFM + YAML front matter.
 import { commonmarkLanguage, markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { tags as t } from '@lezer/highlight';
-import { GFM, type MarkdownConfig } from '@lezer/markdown';
+import { GFM } from '@lezer/markdown';
+import { footnotes, frontMatter, math, wikiLink } from '../shared/markdownSyntax';
 
-const FRONT_MATTER_NEXT = /^\s*(?:[A-Za-z_][\w .-]*:|#|-\s|---\s*$|\.\.\.\s*$)/;
+export { footnotes, math };
 
-/** A `---` block at the very start of the document is YAML front matter, not a rule. */
-const frontMatter: MarkdownConfig = {
-  defineNodes: [{ name: 'FrontMatter', block: true, style: t.meta }],
-  parseBlock: [
-    {
-      name: 'FrontMatter',
-      before: 'HorizontalRule',
-      parse(cx, line) {
-        if (cx.lineStart !== 0 || !/^---[ \t]*$/.test(line.text)) return false;
-        if (!FRONT_MATTER_NEXT.test(cx.peekLine())) return false;
-        const start = cx.lineStart;
-        while (cx.nextLine()) {
-          if (/^(?:---|\.\.\.)[ \t]*$/.test(line.text)) {
-            const end = cx.lineStart + line.text.length;
-            cx.nextLine();
-            cx.addElement(cx.elt('FrontMatter', start, end));
-            return true;
-          }
-        }
-        cx.addElement(cx.elt('FrontMatter', start, cx.prevLineEnd()));
-        return true;
-      },
-    },
-  ],
-};
+/** The id of a footnote reference (`[^id]`) or label (`[^id]:`). */
+export function footnoteId(source: string): string {
+  return source.slice(2, source.indexOf(']')).toLowerCase();
+}
 
-/**
- * Math: `$x$` and `$$x$$` inline, and a `$$` block. A dollar sign followed by a space,
- * or a closing one followed by a digit, is left as plain text so prices are not math.
- */
-export const math: MarkdownConfig = {
-  defineNodes: [{ name: 'BlockMath', block: true }, { name: 'InlineMath' }],
-  parseBlock: [
-    {
-      name: 'BlockMath',
-      before: 'FencedCode',
-      parse(cx, line) {
-        if (line.next !== 36 || line.text.charCodeAt(line.pos + 1) !== 36) return false;
-        const start = cx.lineStart + line.pos;
-        const rest = line.text.slice(line.pos + 2);
-        const closes = (text: string) => /\$\$[ \t]*$/.test(text);
-        if (rest.trim().length > 2 && closes(rest)) {
-          const end = cx.lineStart + line.text.trimEnd().length;
-          cx.nextLine();
-          cx.addElement(cx.elt('BlockMath', start, end));
-          return true;
-        }
-        if (rest.trim() !== '' && rest.includes('$$')) return false;
-        while (cx.nextLine()) {
-          if (closes(line.text)) {
-            const end = cx.lineStart + line.text.trimEnd().length;
-            cx.nextLine();
-            cx.addElement(cx.elt('BlockMath', start, end));
-            return true;
-          }
-        }
-        cx.addElement(cx.elt('BlockMath', start, cx.prevLineEnd()));
-        return true;
-      },
-    },
-  ],
-  parseInline: [
-    {
-      name: 'InlineMath',
-      before: 'Emphasis',
-      parse(cx, next, pos) {
-        if (next !== 36) return -1;
-        const width = cx.char(pos + 1) === 36 ? 2 : 1;
-        const first = cx.char(pos + width);
-        if (first < 0 || first === 32 || first === 9 || first === 10 || first === 36) return -1;
-        for (let i = pos + width; i < cx.end; i++) {
-          const ch = cx.char(i);
-          if (ch === 92) {
-            i++;
-            continue;
-          }
-          if (ch === 10 && cx.char(i + 1) === 10) return -1;
-          if (ch !== 36) continue;
-          if (width === 2 && cx.char(i + 1) !== 36) continue;
-          const before = cx.char(i - 1);
-          const after = cx.char(i + width);
-          if (before === 32 || before === 9) continue;
-          if (width === 1 && after >= 48 && after <= 57) continue;
-          return cx.addElement(cx.elt('InlineMath', pos, i + width));
-        }
-        return -1;
-      },
-    },
-  ],
-};
+export { texOf } from '../shared/markdownSyntax';
 
-/**
- * Wiki links: `[[Note]]`, `[[Note#Heading]]`, `[[Note|shown text]]`. Not standard Markdown,
- * so this is only added to the parser when the setting asks for it.
- */
-export const wikiLink: MarkdownConfig = {
-  defineNodes: [{ name: 'WikiLink' }, { name: 'WikiLinkMark', style: t.processingInstruction }],
-  parseInline: [
-    {
-      name: 'WikiLink',
-      before: 'Link',
-      parse(cx, next, pos) {
-        if (next !== 91 || cx.char(pos + 1) !== 91) return -1;
-        let blank = true;
-        for (let i = pos + 2; i < cx.end; i++) {
-          const ch = cx.char(i);
-          if (ch === 10 || ch === 91) return -1;
-          if (ch === 93) {
-            if (blank || cx.char(i + 1) !== 93) return -1;
-            return cx.addElement(cx.elt('WikiLink', pos, i + 2, [cx.elt('WikiLinkMark', pos, pos + 2), cx.elt('WikiLinkMark', i, i + 2)]));
-          }
-          if (ch !== 32 && ch !== 9) blank = false;
-        }
-        return -1;
-      },
-    },
-  ],
-};
-
-/** The TeX inside a math node's text. */
-export function texOf(source: string): string {
-  const width = source.startsWith('$$') ? 2 : 1;
-  const end = source.endsWith('$'.repeat(width)) && source.length >= width * 2 ? source.length - width : source.length;
-  return source.slice(width, end).trim();
+/** The source of a math node with its TeX replaced, or null when the TeX would not stay one formula. */
+export function withTex(source: string, tex: string): string | null {
+  const body = tex.replace(/\s*\n\s*/g, ' ').trim();
+  if (body === '') return null;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '$') return null;
+    // A backslash at the very end would escape the closing dollar sign.
+    if (body[i] === '\\' && ++i === body.length) return null;
+  }
+  const mark = source.startsWith('$$') ? '$$' : '$';
+  return mark + body + mark;
 }
 
 export function markdownSupport(options: { wikiLinks?: boolean } = {}) {
   return markdown({
     base: commonmarkLanguage,
-    extensions: [GFM, frontMatter, math, ...(options.wikiLinks ? [wikiLink] : [])],
+    extensions: [GFM, frontMatter, math, footnotes, ...(options.wikiLinks ? [wikiLink] : [])],
     codeLanguages: languages,
     addKeymap: false,
     completeHTMLTags: false,

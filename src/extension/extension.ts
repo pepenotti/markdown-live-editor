@@ -1,11 +1,14 @@
-import MarkdownIt from 'markdown-it';
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
+import { exportHtml, exportPdf, removeTempFiles, wikiHrefs } from './export';
+import { isNotePath } from '../shared/wikiLinks';
 import { BacklinksProvider } from './backlinks';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
+import { renderer, rendererLoaded } from './renderer';
+import { insertTocInTextEditor, updateToc, updateTocOnSave } from './toc';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
@@ -138,8 +141,9 @@ export function activate(context: vscode.ExtensionContext): unknown {
 
   const backlinks = new BacklinksProvider(provider);
   context.subscriptions.push(backlinks, vscode.window.registerTreeDataProvider('seamlessMarkdown.backlinks', backlinks));
-  register('openBacklink', (uri: vscode.Uri, line: number) => {
-    if (uri instanceof vscode.Uri) return provider.openAtLine(uri, typeof line === 'number' ? line : 0);
+  register('openBacklink', (uri: unknown, line: unknown) => {
+    if (uri instanceof vscode.Uri && isNotePath(uri.path)) return provider.openAtLine(uri, typeof line === 'number' ? line : 0);
+    return undefined;
   });
 
   register('copyAsHtml', async () => {
@@ -147,10 +151,58 @@ export function activate(context: vscode.ExtensionContext): unknown {
     if (!session) return;
     await session.flush();
     const selected = await session.selectedText();
-    const html = new MarkdownIt({ html: true, linkify: true }).render(selected || session.document.getText());
+    const text = selected || session.document.getText();
+    // A copied fragment has no folder, so with wiki links on a note is copied as its text.
+    const { html } = renderer().renderMarkdown(text, { wikiLinks: await wikiHrefs(session.document, text, provider.notes, false) });
     await vscode.env.clipboard.writeText(html);
     vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
   });
+
+  const exporting = (what: string, run: (session: Session) => Promise<unknown>) => async () => {
+    const session = provider.active;
+    if (!session) return undefined;
+    await session.flush();
+    try {
+      return await run(session);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`${what} failed: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  };
+  // A target passed as an argument skips the save dialog (used by the tests and by other extensions).
+  register('exportHtml', (target?: unknown) =>
+    exporting('The HTML export', (session) => exportHtml(session.document, target instanceof vscode.Uri ? target : undefined, provider.notes))(),
+  );
+  register('exportPdf', exporting('The PDF export', (session) => exportPdf(session.document, { notes: provider.notes })));
+  context.subscriptions.push({ dispose: removeTempFiles });
+
+  /* ---------- table of contents ---------- */
+  // Both commands also work in the plain text editor.
+  const markdownTextEditor = () => {
+    const editor = vscode.window.activeTextEditor;
+    return editor && editor.document.languageId === 'markdown' ? editor : undefined;
+  };
+  register('insertTableOfContents', async () => {
+    const session = provider.active;
+    if (session) return session.send('toc');
+    const editor = markdownTextEditor();
+    if (editor) await insertTocInTextEditor(editor);
+  });
+  register('updateTableOfContents', async () => {
+    const session = provider.active;
+    const document = session?.document ?? markdownTextEditor()?.document;
+    if (!document) return;
+    await session?.flush();
+    const result = await updateToc(document);
+    if (result === 'missing') {
+      void vscode.window.showInformationMessage('This document has no table of contents. Add one with "Seamless Markdown: Insert Table of Contents".');
+    } else if (result === 'unchanged') {
+      vscode.window.setStatusBarMessage('The table of contents is up to date', 3000);
+    } else if (result === 'refused') {
+      void vscode.window.showWarningMessage('The table of contents could not be updated: the document cannot be edited.');
+    }
+  });
+  context.subscriptions.push(updateTocOnSave(provider));
 
   register('setAsDefault', async () => {
     await provider.setDefault(true);
@@ -211,16 +263,37 @@ export function activate(context: vscode.ExtensionContext): unknown {
     state: async (uri: vscode.Uri) => (await only(uri)).debugState(),
     states: async (uri: vscode.Uri) => Promise.all(provider.sessionsFor(uri).map((s) => s.debugState())),
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
+    rendererLoaded: () => rendererLoaded(),
+    // The PDF export on a machine without a browser that can print; returns what would have been opened.
+    exportPdfWithoutBrowser: async (uri: vscode.Uri) => {
+      const session = await only(uri);
+      await session.flush();
+      const opened: string[] = [];
+      const file = await exportPdf(session.document, { browser: null, open: async (target) => void opened.push(target.fsPath), notes: provider.notes });
+      return { file, opened };
+    },
     outline: async (uri: vscode.Uri) => buildOutline(extractHeadings((await only(uri)).document.getText())),
     openLink: async (uri: vscode.Uri, href: string) => provider.openLink(await only(uri), href),
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
     listFiles: async (uri: vscode.Uri, imagesOnly: boolean) => listFiles((await only(uri)).document, imagesOnly),
     resolveUris: async (uri: vscode.Uri, uris: string[]) => resolveUris((await only(uri)).document, uris),
-    resolveNotes: async (uri: vscode.Uri, names: string[]) => provider.notes.statuses(uri, names),
+    checkLinks: async (uri: vscode.Uri, targets: { path: string; anchor: string; wiki?: boolean }[]) => provider.links.check(uri, targets),
     listNotes: async (uri: vscode.Uri) => provider.notes.list(uri),
     noteHeadings: async (uri: vscode.Uri, name: string) => provider.notes.headings(uri, name),
-    backlinks: async (uri: vscode.Uri) =>
-      (await provider.notes.backlinks(uri)).map((link) => ({ path: link.uri.fsPath, lines: link.lines })),
+    backlinks: async (uri: vscode.Uri) => (await provider.notes.backlinks(uri)).map((link) => ({ path: link.uri.fsPath, lines: link.lines })),
+    /** What the Backlinks view shows right now, as file names. */
+    backlinksView: async () => (await backlinks.getChildren()).map((node) => (node.kind === 'file' ? node.link.uri.fsPath : '')),
+    resolveNote: async (uri: vscode.Uri, name: string) => {
+      const found = await provider.notes.resolve(uri, name);
+      return found.status === 'found' ? found.uri.fsPath : found.status;
+    },
+    /** Creates a note as a link would, without asking; the path of the file that is there afterwards. */
+    createNote: async (uri: vscode.Uri, name: string) => {
+      const location = provider.notes.locationFor(uri, name);
+      return location && (await provider.notes.create(location)) ? location.fsPath : undefined;
+    },
+    /** What the index of notes holds and which folders are watched, to show that nothing runs while wiki links are off. */
+    noteIndexState: async () => ({ ...provider.notes.state, watching: provider.watch.watching }),
     openWikiLink: async (uri: vscode.Uri, target: string, heading: string, create: boolean) =>
       provider.openWikiLink(await only(uri), target, heading, async () => create),
     openBacklink: async (uri: vscode.Uri, line: number) => provider.openAtLine(uri, line),

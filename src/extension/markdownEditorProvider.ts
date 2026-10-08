@@ -2,6 +2,8 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import {
+  type CheckLinksPayload,
+  type CheckLinksResult,
   type CommandId,
   type EditorConfig,
   type HostMessage,
@@ -10,8 +12,6 @@ import {
   type Mode,
   MODES,
   type NoteHeadingsPayload,
-  type ResolveNotesPayload,
-  type ResolveNotesResult,
   type ResolveUrisPayload,
   type SaveImagePayload,
   type TextChange,
@@ -20,7 +20,10 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
-import { NoteIndex } from './notes';
+import { readTocOptions } from './toc';
+import { LinkChecker } from './linkCheck';
+import { FileWatch } from './fileWatch';
+import { NoteIndex, wikiLinksEnabled } from './notes';
 
 export interface Stats {
   words: number;
@@ -40,7 +43,11 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     fontFamily: c.get<string>('fontFamily', ''),
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
+    pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    toc: readTocOptions(resource),
+    spellCheck: c.get<boolean>('spellCheck', false),
+    checkLinks: c.get<boolean>('checkLinks', true),
     wikiLinks: c.get<boolean>('wikiLinks', false),
   };
 }
@@ -147,6 +154,7 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
+          test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
         for (const done of this.readyWaiters.splice(0)) done();
@@ -213,10 +221,10 @@ export class Session implements SyncTarget {
           data = { items: await resolveUris(this.document, Array.isArray(uris) ? uris.map(String) : []) };
           break;
         }
-        case 'resolveNotes': {
-          const names = (payload as ResolveNotesPayload)?.names;
-          const notes = await this.provider.notes.statuses(this.document.uri, Array.isArray(names) ? names.map(String) : []);
-          data = { notes } satisfies ResolveNotesResult;
+        case 'checkLinks': {
+          const targets = (payload as CheckLinksPayload)?.targets;
+          const wanted = Array.isArray(targets) ? targets.map((t) => ({ path: String(t?.path ?? ''), anchor: String(t?.anchor ?? ''), wiki: t?.wiki === true })) : [];
+          data = { issues: await this.provider.links.check(this.document.uri, wanted) } satisfies CheckLinksResult;
           break;
         }
         case 'listNotes':
@@ -338,24 +346,29 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   /** Fires when the active session, its mode, focus or statistics change. */
   readonly onDidChange = this.changed.event;
   private readonly channel = vscode.window.createOutputChannel('Seamless Markdown');
+  /** Looks at the file system for broken links and publishes them as diagnostics. */
+  readonly links: LinkChecker;
 
-  /** The Markdown files that wiki links can point to. Reads nothing until it is asked. */
-  readonly notes = new NoteIndex();
+  /** The file watchers the link checker and the index of notes share. */
+  readonly watch = new FileWatch();
+  /** The Markdown files that wiki links can point to. Does nothing while wiki links are off. */
+  readonly notes = new NoteIndex(this.watch);
 
   constructor(readonly context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-      this.changed,
-      this.channel,
+    this.links = new LinkChecker(
+      () => {
+        for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
+      },
+      this.watch,
       this.notes,
-      this.notes.onDidChangeNotes(() => {
-        for (const s of this.sessions) if (s.ready) s.post({ type: 'notesChanged' });
-      }),
     );
+    context.subscriptions.push(this.changed, this.channel, this.links, this.notes, this.watch);
   }
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
     const session = new Session(this, document, panel);
     this.sessions.add(session);
+    this.links.adopt(document);
     panel.onDidDispose(() => {
       this.sessions.delete(session);
       session.dispose();
@@ -448,7 +461,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   /**
    * Opens the note a wiki link names and jumps to the heading, if one is given.
-   * A note that does not exist is created next to the linking document once `confirm` agrees.
+   *
+   * The name is text from a document, so it is never used as a path to open: it is looked
+   * up among the notes of the folders the document belongs to, and only such a note is
+   * opened. A note that does not exist can be created, as a plain file directly in the
+   * folder of the linking document, and only after `confirm` has agreed.
    */
   async openWikiLink(
     session: Session,
@@ -457,22 +474,31 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     confirm: (name: string, location: vscode.Uri) => Thenable<boolean> = confirmNewNote,
   ): Promise<vscode.Uri | undefined> {
     const from = session.document.uri;
-    let uri: vscode.Uri | undefined = target.trim() ? undefined : from;
+    if (!wikiLinksEnabled(from)) return undefined;
+    const name = target.trim();
+    let uri: vscode.Uri | undefined = name ? undefined : from;
     if (!uri) {
-      const found = await this.notes.resolve(from, target);
+      const found = await this.notes.resolve(from, name);
       if (found.status === 'found') {
         uri = found.uri;
       } else if (found.status === 'ambiguous') {
         const items = found.uris.map((u) => ({ label: vscode.workspace.asRelativePath(u, false), uri: u }));
-        uri = (await vscode.window.showQuickPick(items, { placeHolder: `Several notes are called "${target}"` }))?.uri;
+        uri = (await vscode.window.showQuickPick(items, { placeHolder: `Several notes are called "${name}"` }))?.uri;
       } else {
-        const location = this.notes.locationFor(from, target);
+        const location = this.notes.locationFor(from, name);
         if (!location) {
-          void vscode.window.showWarningMessage(`"${target}" cannot be used as a file name.`);
+          void vscode.window.showWarningMessage(
+            /[\\/]/.test(name)
+              ? `There is no note "${name}". A note in another folder is not created from a link; create the file first.`
+              : `There is no note "${name}", and that name cannot be used for a file.`,
+          );
           return undefined;
         }
-        if (!(await confirm(target, location))) return undefined;
-        await this.notes.create(location);
+        if (!(await confirm(name, location))) return undefined;
+        if (!(await this.notes.create(location))) {
+          void vscode.window.showWarningMessage(`The note "${name}" could not be created.`);
+          return undefined;
+        }
         uri = location;
       }
     }

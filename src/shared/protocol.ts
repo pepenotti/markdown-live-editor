@@ -1,4 +1,5 @@
 // Messages exchanged between the extension host and the webview editor.
+import type { TocOptions } from './toc';
 
 export type Mode = 'raw' | 'half' | 'full';
 export const MODES: readonly Mode[] = ['raw', 'half', 'full'];
@@ -19,8 +20,16 @@ export interface EditorConfig {
   showToolbar: boolean;
   /** Re-pad the pipes of a table whenever one of its cells is edited. */
   tableAutoAlign: boolean;
+  /** Convert formatted clipboard content (text/html) to Markdown when pasting. */
+  pasteRichText: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
+  /** Which headings a table of contents lists, and how. */
+  toc: TocOptions;
+  /** Turn on the browser's spell checking for the text. */
+  spellCheck: boolean;
+  /** Underline links whose file or heading does not exist. */
+  checkLinks: boolean;
   /** Treat `[[Note]]` as a link to another note. Off by default: it is not standard Markdown. */
   wikiLinks: boolean;
 }
@@ -51,6 +60,7 @@ export type CommandId =
   | 'table'
   | 'codeBlock'
   | 'rule'
+  | 'toc'
   | 'bulletList'
   | 'orderedList'
   | 'taskList'
@@ -65,6 +75,7 @@ export type CommandId =
   | 'revealLine'
   | 'revealAnchor'
   | 'insertImagePaths'
+  | 'recheckLinks'
   | 'focus';
 
 export type HostMessage =
@@ -79,6 +90,8 @@ export type HostMessage =
       /** Webview URI of the workspace folder, used for paths that start with "/". */
       rootUri: string | null;
       isMac: boolean;
+      /** Set by the integration tests. Unlocks `debugType`. */
+      test?: boolean;
     }
   | { type: 'sync'; text: string; epoch: number }
   | { type: 'patch'; from: number; to: number; insert: string; epoch: number; reason?: 'undo' | 'redo' }
@@ -86,12 +99,15 @@ export type HostMessage =
   | { type: 'config'; config: EditorConfig }
   | { type: 'flush'; reqId: number }
   | { type: 'debugRequest'; reqId: number }
+  /**
+   * For the integration tests: types text at the cursor the way a keyboard would, so it
+   * waits in the typing burst. Ignored unless the session was started with `test`.
+   */
+  | { type: 'debugType'; text: string }
   | { type: 'selectionRequest'; reqId: number }
-  /** Notes were added or removed, so wiki links may resolve differently. */
-  | { type: 'notesChanged' }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
-export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'resolveNotes' | 'listNotes' | 'noteHeadings';
+export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'checkLinks' | 'listNotes' | 'noteHeadings';
 
 export interface SaveImagePayload {
   name: string;
@@ -103,12 +119,13 @@ export interface ListFilesPayload {
 export interface ResolveUrisPayload {
   uris: string[];
 }
-/** Asks which of these wiki link targets exist. Answered with `ResolveNotesResult`. */
-export interface ResolveNotesPayload {
-  names: string[];
+/** Asks which of these link targets do not exist. The reply has one entry per target, null when it is fine. */
+export interface CheckLinksPayload {
+  /** `wiki` marks the target of a wiki link: `path` is then a note name. */
+  targets: { path: string; anchor: string; wiki?: boolean }[];
 }
-export interface ResolveNotesResult {
-  notes: Record<string, 'found' | 'missing' | 'ambiguous'>;
+export interface CheckLinksResult {
+  issues: (({ reason: 'file' } | { reason: 'anchor'; suggestion?: string } | { reason: 'note' } | { reason: 'ambiguous' }) | null)[];
 }
 /** Answer to `listNotes`: the notes a wiki link can point to. */
 export interface ListNotesResult {
@@ -146,8 +163,10 @@ export type WebviewMessage =
       /** Zero-based line of the cursor. */
       cursorLine: number;
       problems: string[];
-      /** How many diagrams, formulas and wiki links are drawn on screen, and how many of them failed or lead nowhere. */
-      rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number; wikiLinksMissing: number };
+      /** How many diagrams, formulas and wiki links are drawn on screen, and how many diagrams failed. */
+      rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number };
+      /** Reasons of the links currently underlined as broken, in document order. */
+      brokenLinks: string[];
     };
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'bmp', 'ico'];

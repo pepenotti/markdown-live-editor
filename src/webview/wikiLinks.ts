@@ -1,13 +1,10 @@
-// Wiki links in the editor: where their parts are, and which of them lead to a note.
-// The parser only produces WikiLink nodes while the setting is on, so everything here
-// is idle otherwise.
+// Wiki links in the editor: where their parts are. The parser only produces WikiLink
+// nodes while the setting is on, so nothing here finds anything otherwise. Whether a
+// note exists is the link checker's business (linkCheck.ts).
 import { syntaxTree } from '@codemirror/language';
-import { type EditorState, type Extension, StateEffect, StateField, type Text } from '@codemirror/state';
-import { type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import type { EditorState, Text } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
-import type { ResolveNotesResult } from '../shared/protocol';
-import { type NoteStatus, parseWikiLink, type WikiLinkParts } from '../shared/wikiLinks';
-import type { HostBridge } from './host';
+import { parseWikiLink, type WikiLinkParts } from '../shared/wikiLinks';
 
 export interface WikiLinkInfo extends WikiLinkParts {
   from: number;
@@ -37,83 +34,4 @@ export function wikiLinkAt(state: EditorState, pos: number): WikiLinkInfo | null
     }
   }
   return null;
-}
-
-const setNoteStatus = StateEffect.define<Record<string, NoteStatus>>();
-/** Asks the host again about every link, after notes were added or removed. */
-export const refreshNotes = StateEffect.define<null>();
-
-/** What the host said about the targets of the wiki links seen so far. */
-export const noteStatus = StateField.define<ReadonlyMap<string, NoteStatus>>({
-  create: () => new Map(),
-  update(value, tr) {
-    let next: Map<string, NoteStatus> | undefined;
-    for (const e of tr.effects) {
-      if (!e.is(setNoteStatus)) continue;
-      for (const [name, status] of Object.entries(e.value)) {
-        if ((next ?? value).get(name) !== status) (next ??= new Map(value)).set(name, status);
-      }
-    }
-    return next ?? value;
-  },
-});
-
-/** Asks the host, in batches, whether the notes linked from the visible text exist. */
-export function wikiResolver(host: HostBridge): Extension {
-  const plugin = ViewPlugin.fromClass(
-    class {
-      private timer: ReturnType<typeof setTimeout> | undefined;
-      private readonly asked = new Set<string>();
-      private stale = false;
-
-      constructor(private readonly view: EditorView) {
-        this.schedule();
-      }
-
-      update(u: ViewUpdate): void {
-        const refresh = u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshNotes)));
-        if (refresh) this.stale = true;
-        if (refresh || u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.schedule();
-      }
-
-      private schedule(): void {
-        clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.run(), 120);
-      }
-
-      private run(): void {
-        const state = this.view.state;
-        const known = state.field(noteStatus);
-        const all = this.stale;
-        this.stale = false;
-        const names = new Set<string>();
-        for (const range of this.view.visibleRanges) {
-          syntaxTree(state).iterate({
-            from: range.from,
-            to: range.to,
-            enter: (node) => {
-              if (node.name !== 'WikiLink') return true;
-              const target = wikiLinkInfo(state.doc, node.from, node.to).target;
-              if (target && (all || (!known.has(target) && !this.asked.has(target)))) names.add(target);
-              return false;
-            },
-          });
-        }
-        if (!names.size) return;
-        for (const name of names) this.asked.add(name);
-        host
-          .request<ResolveNotesResult>('resolveNotes', { names: [...names] })
-          .then((result) => this.view.dispatch({ effects: setNoteStatus.of(result.notes) }))
-          .catch(() => {})
-          .finally(() => {
-            for (const name of names) this.asked.delete(name);
-          });
-      }
-
-      destroy(): void {
-        clearTimeout(this.timer);
-      }
-    },
-  );
-  return [noteStatus, plugin];
 }

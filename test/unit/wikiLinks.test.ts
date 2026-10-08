@@ -181,9 +181,9 @@ describe('note resolution', () => {
   });
 
   it('names a note by its file name, or by its path when the name is shared', () => {
-    expect(notes.nameOf('/ws/projects/Ideas.md', '/ws')).toBe('Ideas');
-    expect(notes.nameOf('/ws/projects/Plan.md', '/ws')).toBe('projects/Plan');
-    expect(from('/ws/Home.md', notes.nameOf('/ws/archive/Plan.md', '/ws'))).toEqual({ status: 'found', path: '/ws/archive/Plan.md' });
+    expect(notes.nameOf('/ws/projects/Ideas.md', ['/ws'])).toBe('Ideas');
+    expect(notes.nameOf('/ws/projects/Plan.md', ['/ws'])).toBe('projects/Plan');
+    expect(from('/ws/Home.md', notes.nameOf('/ws/archive/Plan.md', ['/ws']))).toEqual({ status: 'found', path: '/ws/archive/Plan.md' });
   });
 
   it('joins paths', () => {

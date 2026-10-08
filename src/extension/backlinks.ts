@@ -11,13 +11,17 @@ export class BacklinksProvider implements vscode.TreeDataProvider<Node> {
   readonly onDidChangeTreeData = this.changed.event;
   private readonly disposables: vscode.Disposable[] = [this.changed];
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private shown: string | undefined;
+  /** The note the list was last asked to be about; undefined while another kind of editor is active. */
+  private active: string | undefined;
 
   constructor(private readonly provider: MarkdownEditorProvider) {
     this.disposables.push(
       // Fires for focus and word counts as well; only another note is a reason to look again.
       provider.onDidChange(() => {
-        if (provider.active?.document.uri.toString() !== this.shown) this.refreshSoon();
+        const now = provider.active?.document.uri.toString();
+        if (now === this.active) return;
+        this.active = now;
+        this.refreshSoon();
       }),
       provider.notes.onDidChange(() => this.refreshSoon()),
       vscode.workspace.onDidChangeConfiguration((e) => {
@@ -34,8 +38,8 @@ export class BacklinksProvider implements vscode.TreeDataProvider<Node> {
   // VS Code asks only while the view is visible, so a hidden view never reads a file.
   async getChildren(node?: Node): Promise<Node[]> {
     if (node) return node.kind === 'file' ? node.link.lines.map((l) => ({ kind: 'line', uri: node.link.uri, ...l })) : [];
+    // No list while a text editor, a diff or anything else that is not this editor is active.
     const uri = this.provider.active?.document.uri;
-    this.shown = uri?.toString();
     if (!uri || !wikiLinksEnabled(uri)) return [];
     return (await this.provider.notes.backlinks(uri)).map((link) => ({ kind: 'file', link }));
   }
