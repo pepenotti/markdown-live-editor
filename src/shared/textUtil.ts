@@ -98,6 +98,8 @@ export function slugify(heading: string): string {
 export function headingPlainText(text: string): string {
   return (
     text
+      // A footnote reference is a raised number, not part of the heading.
+      .replace(/\[\^[^\]\s]+\]/g, '')
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/!?\[([^\]]*)\]\[[^\]]*\]/g, '$1')
       .replace(/[*`~]/g, '')

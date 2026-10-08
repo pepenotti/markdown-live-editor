@@ -78,6 +78,20 @@ suite('Seamless Markdown', () => {
     assert.ok(before.equals(fs.readFileSync(path.join(dir, 'features.md'))), 'file bytes are unchanged');
   });
 
+  test('opens footnotes, image tags and references in every mode without changing them', async () => {
+    const before = fs.readFileSync(path.join(dir, 'footnotes.md'));
+    const { uri, document } = await open('footnotes.md');
+    for (const mode of ['full', 'raw', 'half']) {
+      await api.command(uri, 'setMode', mode);
+      await until(async () => (await api.mode(uri)) === mode, `mode ${mode}`);
+    }
+    const state = await inStep(uri, document);
+    assert.deepStrictEqual(state.problems, []);
+    assert.strictEqual(document.isDirty, false, 'opening and switching modes must not dirty the document');
+    await document.save();
+    assert.ok(before.equals(fs.readFileSync(path.join(dir, 'footnotes.md'))), 'file bytes are unchanged');
+  });
+
   test('an edit made in the webview reaches the document and can be undone', async () => {
     const { uri, document } = await open('plain.md');
     const original = document.getText();

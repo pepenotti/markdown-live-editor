@@ -27,6 +27,12 @@ describe('heading anchors', () => {
     expect(headingPlainText('~~old~~ new')).toBe('old new');
   });
 
+  it('drops footnote references', () => {
+    expect(headingPlainText('Results[^1] and method[^note]')).toBe('Results and method');
+    expect(headingSlugs([{ text: 'Results[^1]' }])).toEqual(['results']);
+    expect(tocLines('## Results[^1]\n\n[^1]: A note.')).toEqual(['- [Results](#results)']);
+  });
+
   it('keeps underscores that are part of a word', () => {
     expect(headingPlainText('snake_case_name')).toBe('snake_case_name');
     expect(headingSlugs([{ text: 'The `my_var` option' }])).toEqual(['the-my_var-option']);
@@ -289,6 +295,34 @@ describe('table of contents: markers in the editor', () => {
     expect(protectedAt(full, text.indexOf('- [A]'))).toBeNull();
     expect(protectedAt(editor(text, 'half'), start)).toBeNull();
     expect(protectedAt(editor(text, 'raw'), start)).toBeNull();
+  });
+
+  it('hides only a complete pair, and only the first one', () => {
+    const hidden = (text: string, needle: string, from = 0) => protectedAt(editor(text, 'full'), text.indexOf(needle, from))?.value.kind === 'hidden';
+    const lone = 'intro\n\n<!-- toc -->\n\n## A';
+    expect(hidden(lone, '<!-- toc')).toBe(false);
+    const reversed = '<!-- tocstop -->\n\n## A\n\n<!-- toc -->\n';
+    expect(hidden(reversed, '<!-- tocstop')).toBe(false);
+    expect(hidden(reversed, '<!-- toc -->')).toBe(false);
+    const twice = `${TOC}\n\n## A\n\n${TOC}\n`;
+    expect(hidden(twice, '<!-- toc -->')).toBe(true);
+    expect(hidden(twice, '<!-- toc -->', 20)).toBe(false);
+    expect(hidden(twice, '<!-- tocstop', 40)).toBe(false);
+    // A stray start marker before the pair: the first start and the first stop after it are the pair.
+    const stray = `<!-- toc -->\n\ntext\n\n${TOC}\n\n## A`;
+    expect(findTocMarkers(stray)).toEqual({ startLine: 0, endLine: 6 });
+    expect(hidden(stray, '<!-- toc -->')).toBe(true);
+    expect(hidden(stray, '<!-- toc -->', 5)).toBe(false);
+    expect(hidden(stray, '<!-- tocstop')).toBe(true);
+  });
+
+  it('does not treat markers inside a quote or an indented list item as the block', () => {
+    const quoted = '> <!-- toc -->\n> <!-- tocstop -->\n\n## A';
+    expect(findTocMarkers(quoted)).toBeNull();
+    expect(protectedAt(editor(quoted, 'full'), 2)).toBeNull();
+    const nested = '- item\n\n    <!-- toc -->\n    <!-- tocstop -->\n\n## A';
+    expect(findTocMarkers(nested)).toBeNull();
+    expect(protectedAt(editor(nested, 'full'), nested.indexOf('<!--'))).toBeNull();
   });
 
   it('leaves other comments alone', () => {

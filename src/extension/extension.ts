@@ -168,6 +168,8 @@ export function activate(context: vscode.ExtensionContext): unknown {
       void vscode.window.showInformationMessage('This document has no table of contents. Add one with "Seamless Markdown: Insert Table of Contents".');
     } else if (result === 'unchanged') {
       vscode.window.setStatusBarMessage('The table of contents is up to date', 3000);
+    } else if (result === 'refused') {
+      void vscode.window.showWarningMessage('The table of contents could not be updated: the document cannot be edited.');
     }
   });
   context.subscriptions.push(updateTocOnSave(provider));

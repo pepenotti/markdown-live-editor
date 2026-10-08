@@ -22,15 +22,14 @@ async function apply(document: vscode.TextDocument, edit: vscode.TextEdit): Prom
   return vscode.workspace.applyEdit(workspaceEdit);
 }
 
-export type TocResult = 'updated' | 'unchanged' | 'missing';
+export type TocResult = 'updated' | 'unchanged' | 'missing' | 'refused';
 
 /** Regenerates the list of a document. The document is left alone when the list is already right. */
 export async function updateToc(document: vscode.TextDocument): Promise<TocResult> {
   if (!findTocMarkers(document.getText())) return 'missing';
   const edit = tocTextEdit(document);
   if (!edit) return 'unchanged';
-  await apply(document, edit);
-  return 'updated';
+  return (await apply(document, edit)) ? 'updated' : 'refused';
 }
 
 /** Inserts a table of contents at the cursor of a plain text editor, or updates the one it has. */
@@ -49,45 +48,68 @@ export async function insertTocInTextEditor(editor: vscode.TextEditor): Promise<
   }
 }
 
+/** How long a save waits for the editor to hand over unsent typing. */
+const FLUSH_LIMIT_MS = 800;
+
 /**
  * Keeps the table of contents right whenever a Markdown document that has the markers
  * is saved, in this editor or in the plain text editor.
  *
- * VS Code applies the edits a will-save listener returns only if the document did not
- * change while the listener ran. That matters for the Seamless Markdown editor, which
- * sends typing in short bursts: a save that does not come from its own Save command
- * (auto save, File > Save from the menu, Save All) can arrive while the last words are
- * still in the webview. So the listener first asks every editor of the document for its
- * unsent text, which also puts that text into the file being saved, and builds the list
- * from the result. If that changed the document, the returned edits would be dropped, so
- * the list is then applied directly; otherwise it is returned as ordinary TextEdits.
- * Asking the webview is bounded (400 ms each, in parallel), well inside the time VS Code
- * gives a will-save listener. A hidden webview is not asked: it hands over its text when
- * it is hidden.
+ * Rules this listener has to live by:
+ * - VS Code stops calling a will-save listener that throws or takes longer than 1.5 s a
+ *   few times, so nothing here may throw and all waiting is bounded.
+ * - VS Code applies the TextEdits a listener returns only if the document did not change
+ *   while the listener ran; otherwise it drops them.
+ * - The result is idempotent: once the list is right there is no edit, so a save can
+ *   never dirty the document again and cause another save.
+ *
+ * Unsent typing. The Seamless Markdown editor sends typing in short bursts. Its own Save
+ * command asks for the unsent text first, but File > Save from the menu and Save All do
+ * not, so a save the user asked for can arrive while the last words are still in the
+ * webview. For such a manual save the listener asks every editor of the document for its
+ * unsent text first, which also puts that text into the file being saved, and builds the
+ * list from the result. That changes the document, so the returned edits would be
+ * dropped; the list is then applied directly instead. If an editor does not answer in
+ * time the save goes ahead with what the document holds. A hidden webview is not asked:
+ * it hands over its text when it is hidden.
+ *
+ * Auto save is not a moment the user chose, so it does not cut a typing burst short (that
+ * would also split the undo steps): the list is built from the document as it is, and
+ * the typing follows with the next save, as it always did.
  */
 export function updateTocOnSave(provider: MarkdownEditorProvider): vscode.Disposable {
+  const failed = (err: unknown) => provider.log(`table of contents on save: ${err instanceof Error ? err.message : String(err)}`);
   return vscode.workspace.onWillSaveTextDocument((event) => {
-    const document = event.document;
-    const sessions = provider.sessionsFor(document.uri);
-    if (document.languageId !== 'markdown' && !sessions.length) return;
-    if (!vscode.workspace.getConfiguration('seamlessMarkdown', document.uri).get<boolean>('toc.updateOnSave', true)) return;
-    // Documents without the markers are not touched and their save is not delayed.
-    if (!findTocMarkers(document.getText())) return;
-    if (!sessions.length) {
-      const edit = tocTextEdit(document);
-      if (edit) event.waitUntil(Promise.resolve([edit]));
-      return;
-    }
-    const version = document.version;
-    event.waitUntil(
-      (async (): Promise<vscode.TextEdit[]> => {
-        await Promise.all(sessions.map((s) => s.flush()));
+    try {
+      const document = event.document;
+      const sessions = provider.sessionsFor(document.uri);
+      if (document.languageId !== 'markdown' && !sessions.length) return;
+      if (!vscode.workspace.getConfiguration('seamlessMarkdown', document.uri).get<boolean>('toc.updateOnSave', true)) return;
+      // Documents without the markers are not touched and their save is not delayed.
+      if (!findTocMarkers(document.getText())) return;
+      if (!sessions.length || event.reason !== vscode.TextDocumentSaveReason.Manual) {
         const edit = tocTextEdit(document);
-        if (!edit) return [];
-        if (document.version === version) return [edit];
-        await apply(document, edit);
-        return [];
-      })(),
-    );
+        if (edit) event.waitUntil(Promise.resolve([edit]));
+        return;
+      }
+      const version = document.version;
+      event.waitUntil(
+        (async (): Promise<vscode.TextEdit[]> => {
+          try {
+            const limit = new Promise<void>((resolve) => setTimeout(resolve, FLUSH_LIMIT_MS));
+            await Promise.race([Promise.all(sessions.map((s) => s.flush())), limit]);
+            const edit = tocTextEdit(document);
+            if (!edit) return [];
+            if (document.version === version) return [edit];
+            await apply(document, edit);
+          } catch (err) {
+            failed(err);
+          }
+          return [];
+        })(),
+      );
+    } catch (err) {
+      failed(err);
+    }
   });
 }

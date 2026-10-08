@@ -20,10 +20,14 @@ export interface EditorConfig {
   showToolbar: boolean;
   /** Re-pad the pipes of a table whenever one of its cells is edited. */
   tableAutoAlign: boolean;
+  /** Convert formatted clipboard content (text/html) to Markdown when pasting. */
+  pasteRichText: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
   /** Which headings a table of contents lists, and how. */
   toc: TocOptions;
+  /** Turn on the browser's spell checking for the text. */
+  spellCheck: boolean;
 }
 
 /**
@@ -81,6 +85,8 @@ export type HostMessage =
       /** Webview URI of the workspace folder, used for paths that start with "/". */
       rootUri: string | null;
       isMac: boolean;
+      /** Set by the integration tests. Unlocks `debugType`. */
+      test?: boolean;
     }
   | { type: 'sync'; text: string; epoch: number }
   | { type: 'patch'; from: number; to: number; insert: string; epoch: number; reason?: 'undo' | 'redo' }
@@ -88,7 +94,10 @@ export type HostMessage =
   | { type: 'config'; config: EditorConfig }
   | { type: 'flush'; reqId: number }
   | { type: 'debugRequest'; reqId: number }
-  /** For the tests: types text at the cursor the way a keyboard would, so it waits in the typing burst. */
+  /**
+   * For the integration tests: types text at the cursor the way a keyboard would, so it
+   * waits in the typing burst. Ignored unless the session was started with `test`.
+   */
   | { type: 'debugType'; text: string }
   | { type: 'selectionRequest'; reqId: number }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
