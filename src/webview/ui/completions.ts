@@ -61,6 +61,7 @@ const SLASH: SlashItem[] = [
   { name: 'image', label: 'Image', detail: 'choose a file', action: 'image' },
   { name: 'link', label: 'Link', detail: '[text](url)', command: insertLink },
   { name: 'divider', label: 'Divider', detail: '---', command: insertRule },
+  { name: 'toc', label: 'Table of contents', detail: 'links to the headings', action: 'toc' },
 ];
 
 function slashSource(run: (id: CommandId) => void) {

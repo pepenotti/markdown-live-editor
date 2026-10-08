@@ -96,5 +96,59 @@ export const math: MarkdownConfig = {
   ],
 };
 
-/** CommonMark + GFM + front matter + math, without any editor around it. */
-export const markdownParser = baseParser.configure([GFM, frontMatter, math]);
+const FOOTNOTE_DEF = /^\[\^([^\s\[\]]+)\]:(?:[ \t]|$)/;
+/** Lines that start a block of their own and so never continue a footnote's text. */
+const BLOCK_START = /^(?:\[\^|#{1,6}(?:\s|$)|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|```|~~~|\$\$|\||<|(?:[-*_][ \t]*){3,}$)/;
+
+/**
+ * Footnotes: `[^id]` references and `[^id]: text` definitions. A definition runs to
+ * the next blank line; its text is parsed as inline Markdown.
+ */
+export const footnotes: MarkdownConfig = {
+  defineNodes: [{ name: 'FootnoteDefinition', block: true }, { name: 'FootnoteLabel', style: t.labelName }, { name: 'FootnoteReference', style: t.labelName }],
+  parseBlock: [
+    {
+      name: 'FootnoteDefinition',
+      parse(cx, line) {
+        const first = line.text.slice(line.pos);
+        const m = FOOTNOTE_DEF.exec(first);
+        if (!m) return false;
+        const start = cx.lineStart + line.pos;
+        const labelEnd = start + m[1].length + 4;
+        let end = cx.lineStart + line.text.length;
+        let text = first;
+        // Inside a quote or list item the following lines carry that block's markers, so stop after one line.
+        const nested = cx.depth > 1;
+        while (cx.nextLine()) {
+          if (nested) break;
+          const rest = line.text;
+          if (rest.trim() === '' || BLOCK_START.test(rest.trimStart())) break;
+          text += '\n' + rest;
+          end = cx.lineStart + rest.length;
+        }
+        const inline = cx.parser.parseInline(text.slice(labelEnd - start), labelEnd);
+        cx.addElement(cx.elt('FootnoteDefinition', start, end, [cx.elt('FootnoteLabel', start, labelEnd), ...inline]));
+        return true;
+      },
+      endLeaf: (_cx, line) => FOOTNOTE_DEF.test(line.text.slice(line.pos)),
+    },
+  ],
+  parseInline: [
+    {
+      name: 'FootnoteReference',
+      before: 'Link',
+      parse(cx, next, pos) {
+        if (next !== 91 || cx.char(pos + 1) !== 94) return -1;
+        for (let i = pos + 2; i < cx.end; i++) {
+          const ch = cx.char(i);
+          if (ch === 93) return i > pos + 2 ? cx.addElement(cx.elt('FootnoteReference', pos, i + 1)) : -1;
+          if (ch === 91 || ch === 32 || ch === 9 || ch === 10) return -1;
+        }
+        return -1;
+      },
+    },
+  ],
+};
+
+/** CommonMark + GFM + front matter + math + footnotes, without any editor around it. */
+export const markdownParser = baseParser.configure([GFM, frontMatter, math, footnotes]);

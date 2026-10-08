@@ -152,7 +152,51 @@ export type TableOp =
   | { op: 'insertCol'; at: number }
   | { op: 'deleteCol'; col: number }
   | { op: 'moveCol'; col: number; by: -1 | 1 }
-  | { op: 'align'; col: number; align: Align };
+  | { op: 'align'; col: number; align: Align }
+  | { op: 'sort'; col: number; dir: 'asc' | 'desc' }
+  | { op: 'duplicateRow'; row: number }
+  | { op: 'clearRow'; row: number }
+  | { op: 'clearCol'; col: number };
+
+/** The value of a cell that reads as a number, such as `12`, `-3.5`, `1,200`, `$5` or `40%`. */
+function numberOf(text: string): number | null {
+  const m = /^([-+]?)[$€£]?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)\s?%?$/.exec(text.trim());
+  if (!m) return null;
+  const n = Number(m[2].replace(/,/g, ''));
+  return m[1] === '-' ? -n : n;
+}
+
+/** Cell text without the emphasis, code and link markers, so `**b**` sorts next to `b`. */
+function sortText(text: string): string {
+  return text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~`]/g, '')
+    .trim();
+}
+
+const collator = new Intl.Collator(undefined, { sensitivity: 'accent', numeric: true });
+
+/**
+ * Sorts the body rows by one column and leaves the header where it is. The sort is stable.
+ * A column whose filled cells are all numbers sorts by value, any other column by its text
+ * without regard to case. Empty cells go last in both directions.
+ */
+function sortRows(rows: string[][], col: number, dir: 'asc' | 'desc'): void {
+  const body = rows.slice(1);
+  const filled = body.map((row) => row[col].trim()).filter((v) => v !== '');
+  const numeric = filled.length > 0 && filled.every((v) => numberOf(v) !== null);
+  const sign = dir === 'asc' ? 1 : -1;
+  const keyed = body.map((row, index) => {
+    const value = row[col].trim();
+    return { row, index, empty: value === '', num: numeric ? (numberOf(value) ?? 0) : 0, text: numeric ? '' : sortText(value) };
+  });
+  keyed.sort((a, b) => {
+    if (a.empty !== b.empty) return a.empty ? 1 : -1;
+    const order = a.empty ? 0 : numeric ? a.num - b.num : collator.compare(a.text, b.text);
+    return order !== 0 ? sign * order : a.index - b.index;
+  });
+  rows.splice(1, body.length, ...keyed.map((k) => k.row));
+}
 
 /** Applies a structural change. Returns false when it is not possible (for example deleting the header). */
 export function applyOp(model: Pick<TableModel, 'rows' | 'align'>, op: TableOp): boolean {
@@ -200,6 +244,23 @@ export function applyOp(model: Pick<TableModel, 'rows' | 'align'>, op: TableOp):
       if (op.col < 0 || op.col >= cols) return false;
       model.align[op.col] = op.align;
       return true;
+    case 'sort':
+      if (op.col < 0 || op.col >= cols) return false;
+      sortRows(model.rows, op.col, op.dir);
+      return true;
+    case 'duplicateRow':
+      if (op.row < 1 || op.row >= model.rows.length) return false;
+      model.rows.splice(op.row + 1, 0, [...model.rows[op.row]]);
+      return true;
+    case 'clearRow':
+      if (op.row < 0 || op.row >= model.rows.length) return false;
+      model.rows[op.row] = new Array<string>(cols).fill('');
+      return true;
+    case 'clearCol':
+      // The header names the column, so it is kept.
+      if (op.col < 0 || op.col >= cols) return false;
+      for (let r = 1; r < model.rows.length; r++) model.rows[r][op.col] = '';
+      return true;
   }
 }
 
@@ -207,6 +268,11 @@ export function emptyTable(rows: number, cols: number): string {
   const header = Array.from({ length: cols }, (_, i) => `Column ${i + 1}`);
   const body = Array.from({ length: Math.max(1, rows - 1) }, () => new Array<string>(cols).fill(''));
   return serializeTable({ rows: [header, ...body], align: new Array<Align>(cols).fill(null) }, true);
+}
+
+/** The table as tab-separated text, one line per row, for pasting into a spreadsheet. */
+export function tableToTSV(model: Pick<TableModel, 'rows'>): string {
+  return model.rows.map((row) => row.map((cell) => cell.replace(/\s*[\t\r\n]+\s*/g, ' ').trim()).join('\t')).join('\n');
 }
 
 /**

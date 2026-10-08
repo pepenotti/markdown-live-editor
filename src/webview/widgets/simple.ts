@@ -2,6 +2,46 @@
 import { foldable, foldedRanges, foldEffect, syntaxTree, unfoldEffect } from '@codemirror/language';
 import { type EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { MIN_IMAGE_WIDTH, resizeImage } from '../commands/image';
+
+function cssWidth(width: string): string {
+  return /^\d+$/.test(width) ? `${width}px` : width;
+}
+
+/** Dragging the handle changes the picture's width; the document is edited once, on release. */
+function resizeOnDrag(handle: HTMLElement, wrap: HTMLElement, img: HTMLImageElement, view: EditorView): void {
+  handle.addEventListener('mousedown', (down) => {
+    if (down.button !== 0) return;
+    down.preventDefault();
+    down.stopPropagation();
+    const start = img.getBoundingClientRect().width;
+    let moved = false;
+    wrap.classList.add('cm-md-image-resizing');
+    const move = (e: MouseEvent) => {
+      moved = true;
+      img.style.width = `${Math.max(MIN_IMAGE_WIDTH, Math.round(start + e.clientX - down.clientX))}px`;
+      view.requestMeasure();
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      wrap.classList.remove('cm-md-image-resizing');
+      // The picture never grows past the text column, so read back what it really got.
+      const width = Math.round(img.getBoundingClientRect().width);
+      const change = moved && width !== Math.round(start) && wrap.isConnected ? resizeImage(view.state, view.posAtDOM(wrap), width) : null;
+      if (change) {
+        view.dispatch({ changes: change, userEvent: 'input.format' });
+      } else {
+        const before = wrap.dataset.width ?? '';
+        if (before) img.style.width = cssWidth(before);
+        else img.style.removeProperty('width');
+        view.requestMeasure();
+      }
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+}
 
 export class ImageWidget extends WidgetType {
   constructor(
@@ -39,9 +79,16 @@ export class ImageWidget extends WidgetType {
       wrap.classList.add('cm-md-image-error');
       view.requestMeasure();
     });
+    const frame = document.createElement('span');
+    frame.className = 'cm-md-image-frame';
+    const handle = document.createElement('span');
+    handle.className = 'cm-md-image-handle';
+    handle.title = 'Drag to resize';
+    resizeOnDrag(handle, wrap, img, view);
+    frame.append(img, handle);
     const label = document.createElement('span');
     label.className = 'cm-md-image-missing';
-    wrap.append(img, label);
+    wrap.append(frame, label);
     this.apply(wrap);
     return wrap;
   }
@@ -53,20 +100,43 @@ export class ImageWidget extends WidgetType {
   }
 
   private apply(wrap: HTMLElement): void {
-    const img = wrap.firstChild as HTMLImageElement;
+    const img = wrap.querySelector('img')!;
     const label = wrap.lastChild as HTMLElement;
     const missing = this.url === '';
     wrap.className = 'cm-md-image' + (this.below ? ' cm-md-image-below' : '') + (missing ? ' cm-md-image-error' : '');
     label.textContent = this.src === '' ? 'No image path yet' : `Image not found: ${this.src}`;
     img.alt = this.alt;
     img.title = this.title || this.alt;
-    if (this.width) img.style.width = /^\d+$/.test(this.width) ? `${this.width}px` : this.width;
+    wrap.dataset.width = this.width;
+    if (this.width) img.style.width = cssWidth(this.width);
     else img.style.removeProperty('width');
     if (!missing && img.getAttribute('src') !== this.url) img.src = this.url;
     if (missing) img.removeAttribute('src');
   }
 
   /** Clicks go to the editor, which puts the cursor next to the image. */
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/** The number of a footnote: raised where it is referenced, in front of its text where it is defined. */
+export class FootnoteWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly reference: boolean,
+  ) {
+    super();
+  }
+  override eq(other: FootnoteWidget): boolean {
+    return other.label === this.label && other.reference === this.reference;
+  }
+  override toDOM(): HTMLElement {
+    const dom = document.createElement(this.reference ? 'sup' : 'span');
+    dom.className = this.reference ? 'cm-md-footnote-ref' : 'cm-md-footnote-label';
+    dom.textContent = this.reference ? this.label : `${this.label}.`;
+    return dom;
+  }
   override ignoreEvent(): boolean {
     return false;
   }

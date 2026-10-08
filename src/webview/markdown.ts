@@ -2,9 +2,14 @@
 import { commonmarkLanguage, markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { GFM } from '@lezer/markdown';
-import { frontMatter, math } from '../shared/markdownSyntax';
+import { footnotes, frontMatter, math } from '../shared/markdownSyntax';
 
-export { math };
+export { footnotes, math };
+
+/** The id of a footnote reference (`[^id]`) or label (`[^id]:`). */
+export function footnoteId(source: string): string {
+  return source.slice(2, source.indexOf(']')).toLowerCase();
+}
 
 /** The TeX inside a math node's text. */
 export function texOf(source: string): string {
@@ -13,10 +18,23 @@ export function texOf(source: string): string {
   return source.slice(width, end).trim();
 }
 
+/** The source of a math node with its TeX replaced, or null when the TeX would not stay one formula. */
+export function withTex(source: string, tex: string): string | null {
+  const body = tex.replace(/\s*\n\s*/g, ' ').trim();
+  if (body === '') return null;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '$') return null;
+    // A backslash at the very end would escape the closing dollar sign.
+    if (body[i] === '\\' && ++i === body.length) return null;
+  }
+  const mark = source.startsWith('$$') ? '$$' : '$';
+  return mark + body + mark;
+}
+
 export function markdownSupport() {
   return markdown({
     base: commonmarkLanguage,
-    extensions: [GFM, frontMatter, math],
+    extensions: [GFM, frontMatter, math, footnotes],
     codeLanguages: languages,
     addKeymap: false,
     completeHTMLTags: false,

@@ -16,6 +16,7 @@ import {
   splitTarget,
   withIssues,
 } from '../../src/shared/linkCheck';
+import { tocBlock } from '../../src/shared/toc';
 import { stateOf } from './helpers';
 
 /** Findings of a document when the "file system" answers with `missing`. */
@@ -61,19 +62,25 @@ describe('scanDocument', () => {
     for (const l of links) expect(text.slice(l.hrefFrom, l.hrefFrom + l.href!.length)).toBe(l.href);
   });
 
-  it('resolves reference links through their definition, in every form', () => {
+  it('lists the target of reference links once, where the definition writes it', () => {
     const text = '[full][Ref], [ref][] and [ref].\n\n[REF]: notes/a.md "Title"\n';
     const { links } = scanText(text);
-    expect(links.map((l) => [l.kind, l.href, l.label])).toEqual([
-      ['link', 'notes/a.md', 'Ref'],
-      ['link', 'notes/a.md', 'ref'],
-      ['link', 'notes/a.md', 'ref'],
-      ['definition', 'notes/a.md', undefined],
-    ]);
-    // The target of a reference link is written in the definition.
-    const at = text.indexOf('notes/a.md');
-    expect(links.every((l) => l.hrefFrom === at)).toBe(true);
-    expect(text.slice(links[3].from, links[3].to)).toBe('notes/a.md');
+    expect(links.map((l) => [l.kind, l.href, l.label])).toEqual([['definition', 'notes/a.md', undefined]]);
+    expect(links[0].hrefFrom).toBe(text.indexOf('notes/a.md'));
+    expect(text.slice(links[0].from, links[0].to)).toBe('notes/a.md');
+  });
+
+  it('does not take footnotes for links', () => {
+    const text = 'A claim[^1] and another[^note], and [text][^1].\n\n# Title[^1]\n\n[^1]: The source, see [the paper](papers/a.pdf).\n[^note]: Plain.\n';
+    const scan = scanText(text);
+    expect(scan.links.map((l) => [l.kind, l.href])).toEqual([['link', 'papers/a.pdf']]);
+    expect(scan.headings.map((h) => h.slug)).toEqual(['title']);
+    expect(check(text)).toEqual([]);
+  });
+
+  it('does not take indexing such as matrix[i][j] for a reference link', () => {
+    expect(scanText('Read matrix[i][j] and f(x)[0][1], then `a[i][j]`.\n').links).toEqual([]);
+    expect(messages('But [i][j] on its own is one.\n')).toEqual(['No definition for [j]']);
   });
 
   it('reports a reference without a definition, but not plain brackets', () => {
@@ -122,24 +129,24 @@ describe('scanDocument', () => {
   it('gives headings GitHub-style slugs, numbering repeats', () => {
     const text = ['# Set up *now*!', '', 'Setext `title`', '===', '', '## Usage', '### Usage ##', '## Usage', '## snake_case name', '## See [the docs](docs.md)', '', '```', '# not a heading', '```', ''].join('\n');
     const { headings } = scanText(text);
-    expect(headings.map((h) => h.slug)).toEqual(['set-up-now', 'setext-title', 'usage', 'usage-1', 'usage-2', 'snakecase-name', 'see-the-docs']);
-    expect(headings[5].alt).toBe('snake_case-name');
+    expect(headings.map((h) => h.slug)).toEqual(['set-up-now', 'setext-title', 'usage', 'usage-1', 'usage-2', 'snake_case-name', 'see-the-docs']);
     expect(headings[6].text).toBe('See [the docs](docs.md)');
     expect(text.slice(headings[3].from).startsWith('### Usage')).toBe(true);
   });
 
   it('collects id and name attributes of raw HTML as anchors', () => {
-    const scan = scanText('<a name="top"></a>\n\nText <span id=\'inline\'>x</span>\n\n<div id="block">\n</div>\n');
-    expect(scan.htmlIds.sort()).toEqual(['block', 'inline', 'top']);
+    const scan = scanText('<a name="top"></a>\n\nText <span id=\'inline\'>x</span> <a id=bare></a>\n\n<div id="block">\n</div>\n');
+    expect(scan.htmlIds.sort()).toEqual(['bare', 'block', 'inline', 'top']);
     expect(hasAnchor(anchorSet(scan), 'top')).toBe(true);
+    expect(check('<a id="Top"></a>\n\n[up](#Top) [bare](#bare)\n\n<a id=bare></a>\n')).toEqual([]);
   });
 
   it('reads the tree of the editor the same way as a fresh parse', () => {
-    const text = '---\ntitle: x\n---\n\n# One\n\n[a](a.md) $[m](m.md)$ [r][x] ![i](i.png)\n\n| [c](c.md) |\n| --- |\n\n```md\n[f](f.md)\n```\n\n[x]: x.md\n';
+    const text = '---\ntitle: x\n---\n\n# One[^n]\n\n[a](a.md) $[m](m.md)$ [r][x] ![i](i.png) note[^n] [t][^n]\n\n| [c](c.md) |\n| --- |\n\n```md\n[f](f.md)\n```\n\n[^n]: Note.\n\n[x]: x.md\n';
     const state = stateOf(text);
-    const fromEditor = scanDocument(syntaxTree(state), (from, to) => state.doc.sliceString(from, to));
+    const fromEditor = scanDocument(syntaxTree(state), text);
     expect(fromEditor).toEqual(scanText(text));
-    expect(fromEditor.links.map((l) => l.href)).toEqual(['a.md', 'x.md', 'i.png', 'c.md', 'x.md']);
+    expect(fromEditor.links.map((l) => l.href)).toEqual(['a.md', 'i.png', 'c.md', 'x.md']);
   });
 });
 
@@ -148,8 +155,8 @@ describe('anchors', () => {
 
   it('accepts slugs, numbered repeats and the written heading', () => {
     const anchors = anchorSet(scan);
-    for (const ok of ['', 'getting-started', 'Getting-Started', 'Getting Started', 'setup', 'setup-1', 'my_var', 'myvar']) expect(hasAnchor(anchors, ok), ok).toBe(true);
-    for (const bad of ['setup-2', 'started', 'set-up']) expect(hasAnchor(anchors, bad), bad).toBe(false);
+    for (const ok of ['', 'getting-started', 'Getting-Started', 'Getting Started', 'setup', 'setup-1', 'my_var']) expect(hasAnchor(anchors, ok), ok).toBe(true);
+    for (const bad of ['setup-2', 'started', 'set-up', 'myvar']) expect(hasAnchor(anchors, bad), bad).toBe(false);
   });
 
   it('finds the heading an anchor points at', () => {
@@ -198,11 +205,44 @@ describe('findings', () => {
     ]);
   });
 
-  it('underlines the whole link, and the usage as well as the definition of a reference', () => {
-    const text = 'Go to [the notes][n].\n\n[n]: notes/a.md\n';
+  it('reports a bad reference target once, on its definition, however often it is used', () => {
+    const text = 'Go to [the notes][n], [n] or ![pic][n].\n\n[n]: notes/a.md\n';
     const found = check(text, { 'notes/a.md': { reason: 'file' } });
-    expect(found.map((f) => text.slice(f.from, f.to))).toEqual(['[the notes][n]', 'notes/a.md']);
-    expect(found.every((f) => f.message === 'File not found: notes/a.md' && f.reason === 'file')).toBe(true);
+    expect(found.map((f) => [text.slice(f.from, f.to), f.message])).toEqual([['notes/a.md', 'File not found: notes/a.md']]);
+    // Without a definition there is nowhere else to say it, so each link is reported.
+    expect(messages('[a][n] and [b][n]\n')).toEqual(['No definition for [n]', 'No definition for [n]']);
+  });
+
+  it('accepts every link of a generated table of contents', () => {
+    const body = [
+      '# Guide',
+      '',
+      '## Set up `npm` *now*, **really**',
+      '## See [the docs](docs.md) and ~~old~~ [ref][r]',
+      '## Notes[^1]',
+      '## snake_case and _emphasis_',
+      '## Café & Crème: 100%?',
+      '## Usage',
+      '> ## Usage',
+      '',
+      '- ## Usage',
+      '',
+      '## Usage',
+      '### Usage ##',
+      '',
+      'Setext',
+      '------',
+      '',
+      '[^1]: Note.',
+      '',
+      '[r]: https://example.com',
+      '',
+    ].join('\n');
+    const toc = tocBlock(body);
+    expect(toc.split('\n').length).toBeGreaterThan(8);
+    expect(check(`${toc}\n\n${body}`)).toEqual([]);
+    // Typed by hand with other capitals, or percent-encoded, they are still the same headings.
+    expect(check(`[a](#Usage-1) [b](#caf%C3%A9--cr%C3%A8me-100) [c](#setext) [d](#notes)\n\n${body}`)).toEqual([]);
   });
 
   it('offers a close heading of the same document as a fix', () => {
@@ -217,12 +257,9 @@ describe('findings', () => {
   it('fixes the anchor of another file, keeping the path, also inside a definition', () => {
     const text = '[a](notes/other.md#other-nte "t") and [b][ref]\n\n[ref]: <notes/other.md#other-nte>\n';
     const found = check(text, { 'notes/other.md#other-nte': { reason: 'anchor', suggestion: 'other-note' } });
-    expect(found).toHaveLength(3);
+    expect(found).toHaveLength(2);
     expect(apply(text, found[0])).toBe('[a](notes/other.md#other-note "t") and [b][ref]\n\n[ref]: <notes/other.md#other-nte>\n');
-    // The reference link and its definition both fix the definition.
-    const fixed = '[a](notes/other.md#other-nte "t") and [b][ref]\n\n[ref]: <notes/other.md#other-note>\n';
-    expect(apply(text, found[1])).toBe(fixed);
-    expect(apply(text, found[2])).toBe(fixed);
+    expect(apply(text, found[1])).toBe('[a](notes/other.md#other-nte "t") and [b][ref]\n\n[ref]: <notes/other.md#other-note>\n');
   });
 
   it('has no fix without a suggestion, for a missing file or for a missing definition', () => {

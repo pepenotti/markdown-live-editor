@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- Footnotes: `[^1]` references render as numbers, and Cmd/Ctrl+click jumps to the definition.
+- Image resizing: drag the corner of an image to set its width.
+- Full preview can now edit inline math and the target of reference-style links in the popover.
+- Rich-text paste: content copied from web pages, Google Docs or Word is pasted as Markdown. Turn it off with `seamlessMarkdown.pasteRichText`.
+- Tables: sort by column, duplicate and clear rows, a right-click menu, copy as Markdown or TSV, and a width cap for long cells.
+- Table of contents: insert with a command or `/toc`, and it is kept up to date on save.
+- Spell check setting, `seamlessMarkdown.spellCheck`, off by default.
+- Lone `<img>` tags now render like Markdown images, with the tag hidden until the cursor is on it.
+- Copied Excel cells now paste as a table instead of a picture.
+
 ## 0.2.0
 
 - Math: inline `$…$` and `$$` blocks, drawn with KaTeX.

@@ -99,7 +99,7 @@ export function linkCheck(options: LinkCheckOptions): LinkCheck {
     }
     retries = 0;
     const text = doc.toString();
-    const scan = scanDocument(tree, (from, to) => text.slice(from, to));
+    const scan = scanDocument(tree, text);
     const analysis = analyse(scan);
     let issues: (LinkIssue | null)[] = [];
     if (analysis.targets.length) {

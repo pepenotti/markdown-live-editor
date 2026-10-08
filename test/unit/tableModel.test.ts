@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOp, emptyTable, parseTable, serializeTable, setCell, tableFromTSV } from '../../src/webview/table/model';
+import { applyOp, emptyTable, parseTable, serializeTable, setCell, tableFromTSV, tableToTSV } from '../../src/webview/table/model';
 
 const TABLE = ['| Name  | Qty |  Note  |', '| :---- | --: | :----: |', '| Apple |   3 | fresh  |', '| Kiwi  |  12 | a \\| b |'].join('\n');
 
@@ -85,5 +85,80 @@ describe('table model', () => {
     expect(tableFromTSV('a\tb')).toBeNull();
     expect(tableFromTSV('a\tb\n1')).toBeNull();
     expect(tableFromTSV('plain\ntext')).toBeNull();
+  });
+
+  const table = (...rows: string[][]) => parseTable(serializeTable({ rows, align: rows[0].map(() => null) }, false))!;
+  const column = (m: { rows: string[][] }, c = 0) => m.rows.map((r) => r[c]);
+
+  it('sorts body rows by a text column and keeps the header first', () => {
+    const m = table(['Zed'], ['pear'], ['Apple'], ['banana'], ['apple']);
+    expect(applyOp(m, { op: 'sort', col: 0, dir: 'asc' })).toBe(true);
+    // Case is ignored, and equal keys keep their original order.
+    expect(column(m)).toEqual(['Zed', 'Apple', 'apple', 'banana', 'pear']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'desc' });
+    expect(column(m)).toEqual(['Zed', 'pear', 'banana', 'Apple', 'apple']);
+  });
+
+  it('sorts a column of numbers by value', () => {
+    const m = table(['Qty', 'Name'], ['10', 'a'], ['9', 'b'], ['-2.5', 'c'], ['1,200', 'd'], ['$30', 'e'], ['40%', 'f']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'asc' });
+    expect(column(m)).toEqual(['Qty', '-2.5', '9', '10', '$30', '40%', '1,200']);
+    expect(column(m, 1)).toEqual(['Name', 'c', 'b', 'a', 'e', 'f', 'd']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'desc' });
+    expect(column(m)).toEqual(['Qty', '1,200', '40%', '$30', '10', '9', '-2.5']);
+  });
+
+  it('sorts a mixed column as text, with digit runs in numeric order', () => {
+    const m = table(['Id'], ['item 10'], ['item 2'], ['7'], ['**bold**'], ['[link](http://x)']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'asc' });
+    expect(column(m)).toEqual(['Id', '7', '**bold**', 'item 2', 'item 10', '[link](http://x)']);
+  });
+
+  it('puts empty cells last in both directions', () => {
+    const m = table(['N', 'Tag'], ['', 'first'], ['3', 'x'], ['', 'second'], ['1', 'y']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'asc' });
+    expect(m.rows.slice(1)).toEqual([['1', 'y'], ['3', 'x'], ['', 'first'], ['', 'second']]);
+    applyOp(m, { op: 'sort', col: 0, dir: 'desc' });
+    expect(m.rows.slice(1)).toEqual([['3', 'x'], ['1', 'y'], ['', 'first'], ['', 'second']]);
+  });
+
+  it('sorts stably and rejects a column that does not exist', () => {
+    const m = table(['K', 'V'], ['b', '1'], ['a', '2'], ['b', '3'], ['a', '4']);
+    applyOp(m, { op: 'sort', col: 0, dir: 'desc' });
+    expect(column(m, 1)).toEqual(['V', '1', '3', '2', '4']);
+    expect(applyOp(m, { op: 'sort', col: 2, dir: 'asc' })).toBe(false);
+    expect(applyOp(m, { op: 'sort', col: -1, dir: 'asc' })).toBe(false);
+    const headerOnly = parseTable('| b | a |\n| - | - |')!;
+    expect(applyOp(headerOnly, { op: 'sort', col: 0, dir: 'asc' })).toBe(true);
+    expect(headerOnly.rows).toEqual([['b', 'a']]);
+  });
+
+  it('duplicates a body row but never the header', () => {
+    const m = parseTable(TABLE)!;
+    expect(applyOp(m, { op: 'duplicateRow', row: 0 })).toBe(false);
+    expect(applyOp(m, { op: 'duplicateRow', row: 3 })).toBe(false);
+    expect(applyOp(m, { op: 'duplicateRow', row: 1 })).toBe(true);
+    expect(column(m)).toEqual(['Name', 'Apple', 'Apple', 'Kiwi']);
+    m.rows[2][0] = 'Pear';
+    expect(m.rows[1][0]).toBe('Apple');
+    expect(serializeTable(m, false).split('\n')[3]).toBe('| Pear | 3 | fresh |');
+  });
+
+  it('clears a row or the body of a column', () => {
+    const m = parseTable(TABLE)!;
+    expect(applyOp(m, { op: 'clearRow', row: 1 })).toBe(true);
+    expect(m.rows).toEqual([['Name', 'Qty', 'Note'], ['', '', ''], ['Kiwi', '12', 'a | b']]);
+    expect(applyOp(m, { op: 'clearCol', col: 1 })).toBe(true);
+    expect(m.rows).toEqual([['Name', 'Qty', 'Note'], ['', '', ''], ['Kiwi', '', 'a | b']]);
+    expect(applyOp(m, { op: 'clearRow', row: 3 })).toBe(false);
+    expect(applyOp(m, { op: 'clearCol', col: 3 })).toBe(false);
+    expect(m.align).toEqual(['left', 'right', 'center']);
+    // A cleared table is still a table.
+    expect(parseTable(serializeTable(m, true))!.rows).toEqual(m.rows);
+  });
+
+  it('writes the table as tab-separated text', () => {
+    expect(tableToTSV(parseTable(TABLE)!)).toBe('Name\tQty\tNote\nApple\t3\tfresh\nKiwi\t12\ta | b');
+    expect(tableFromTSV(tableToTSV(parseTable(TABLE)!))).toBe(serializeTable({ rows: parseTable(TABLE)!.rows, align: [null, null, null] }, true));
   });
 });

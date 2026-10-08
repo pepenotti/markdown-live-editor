@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -67,9 +67,11 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "gifenc": "^1.0.3",
+    "jsdom": "^29.1.1",
     "katex": "^0.19.0",
     "markdown-it": "^15.0.2",
     "mermaid": "^12.1.0",
+    "ovsx": "^1.2.0",
     "pngjs": "^7.0.0",
     "puppeteer-core": "^25.12.0",
     "typescript": "^7.0.2",
@@ -113,7 +115,7 @@
       },
       {
         "command": "seamlessMarkdown.pickMode",
-        "title": "Choose Mode\u2026",
+        "title": "Choose Mode…",
         "category": "Seamless Markdown"
       },
       {
@@ -163,7 +165,7 @@
       },
       {
         "command": "seamlessMarkdown.insertImage",
-        "title": "Insert Image\u2026",
+        "title": "Insert Image…",
         "category": "Seamless Markdown"
       },
       {
@@ -179,6 +181,16 @@
       {
         "command": "seamlessMarkdown.insertRule",
         "title": "Insert Horizontal Rule",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.insertTableOfContents",
+        "title": "Insert Table of Contents",
+        "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.updateTableOfContents",
+        "title": "Update Table of Contents",
         "category": "Seamless Markdown"
       },
       {
@@ -233,7 +245,7 @@
       },
       {
         "command": "seamlessMarkdown.goToHeading",
-        "title": "Go to Heading\u2026",
+        "title": "Go to Heading…",
         "category": "Seamless Markdown"
       },
       {
@@ -439,6 +451,14 @@
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
+          "command": "seamlessMarkdown.insertTableOfContents",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' || editorLangId == markdown"
+        },
+        {
+          "command": "seamlessMarkdown.updateTableOfContents",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' || editorLangId == markdown"
+        },
+        {
           "command": "seamlessMarkdown.toggleBulletList",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
@@ -583,6 +603,28 @@
           "default": true,
           "description": "Re-align the pipes of a table in the source whenever one of its cells is edited. When off, only the edited cell changes."
         },
+        "seamlessMarkdown.pasteRichText": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Paste formatted text copied from a web page or a word processor as Markdown. Paste with `Shift` held to get the plain text."
+        },
+        "seamlessMarkdown.toc.updateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Bring the table of contents between `<!-- toc -->` and `<!-- tocstop -->` up to date when a Markdown file is saved, also in the plain text editor. Files without these markers are never changed."
+        },
+        "seamlessMarkdown.toc.levels": {
+          "type": "string",
+          "default": "1..6",
+          "pattern": "^\\s*[1-6]\\s*(\\.\\.\\s*[1-6]\\s*)?$",
+          "patternErrorMessage": "Use a range such as 2..4, or a single level such as 2.",
+          "markdownDescription": "Heading levels listed in a table of contents, for example `2..4`. A single H1 is taken to be the title and is always left out."
+        },
+        "seamlessMarkdown.toc.ordered": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write the table of contents as a numbered list instead of bullets."
+        },
         "seamlessMarkdown.promptToSetDefault": {
           "type": "boolean",
           "default": true,
@@ -598,6 +640,11 @@
           "default": "",
           "editPresentation": "multilineText",
           "markdownDescription": "Extra CSS rules for the editor, for example `#app .cm-content { font-family: Georgia; }`."
+        },
+        "seamlessMarkdown.spellCheck": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the editor's built-in spell checker to check the text and table cells. Whether misspelled words are underlined depends on VS Code and the operating system."
         }
       }
     },

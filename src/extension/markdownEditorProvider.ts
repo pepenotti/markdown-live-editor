@@ -18,6 +18,7 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { readTocOptions } from './toc';
 import { LinkChecker } from './linkCheck';
 
 export interface Stats {
@@ -38,7 +39,10 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     fontFamily: c.get<string>('fontFamily', ''),
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
+    pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    toc: readTocOptions(resource),
+    spellCheck: c.get<boolean>('spellCheck', false),
     checkLinks: c.get<boolean>('checkLinks', true),
   };
 }
@@ -134,6 +138,7 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
+          test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
         for (const done of this.readyWaiters.splice(0)) done();
@@ -322,6 +327,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
     const session = new Session(this, document, panel);
     this.sessions.add(session);
+    this.links.adopt(document);
     panel.onDidDispose(() => {
       this.sessions.delete(session);
       session.dispose();

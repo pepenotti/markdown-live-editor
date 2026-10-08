@@ -4,6 +4,7 @@
 import * as vscode from 'vscode';
 import {
   analyse,
+  type Anchors,
   checkAnchor,
   type DocumentScan,
   type Finding,
@@ -28,8 +29,6 @@ const MAX_ANCHOR_FILE_BYTES = 5 * 1024 * 1024;
 /** Larger documents are not parsed again on the extension host; the editor still underlines their links. */
 const MAX_DOCUMENT_CHARS = 5_000_000;
 
-type Anchors = Pick<DocumentScan, 'headings' | 'htmlIds'>;
-
 interface FileInfo {
   exists: boolean;
   /** Anchors of a Markdown file, read on first use. */
@@ -45,10 +44,8 @@ function enabled(uri: vscode.Uri): boolean {
   return vscode.workspace.getConfiguration('seamlessMarkdown', uri).get<boolean>('checkLinks', true);
 }
 
-/** Markdown documents backed by real files; not diffs, notebook cells or untitled buffers. */
-function checkable(document: vscode.TextDocument): boolean {
-  if (document.languageId !== 'markdown' && !MARKDOWN_FILE.test(document.uri.path)) return false;
-  return document.uri.scheme === 'file' || !!vscode.workspace.getWorkspaceFolder(document.uri);
+function isMarkdown(document: vscode.TextDocument): boolean {
+  return document.languageId === 'markdown' || MARKDOWN_FILE.test(document.uri.path);
 }
 
 function dirOf(uri: vscode.Uri): vscode.Uri {
@@ -72,25 +69,22 @@ export class LinkChecker implements vscode.Disposable {
   private readonly signatures = new Map<string, string>();
   /** Watchers for the folders of documents that are outside every workspace folder. */
   private readonly folderWatchers = new Map<string, vscode.Disposable>();
+  private workspaceWatcher: vscode.Disposable | undefined;
   private filesTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Documents that were opened in this editor; they stay checked until they close, wherever they are. */
+  private readonly adopted = new Set<string>();
+  private readonly openAnchors = new WeakMap<vscode.TextDocument, { version: number; anchors: Anchors }>();
 
   /** @param recheck asks the open editors to check their links again. */
   constructor(private readonly recheck: () => void) {
     const workspace = vscode.workspace;
-    const watcher = workspace.createFileSystemWatcher('**/*');
     this.disposables.push(
-      watcher,
-      watcher.onDidCreate((uri) => this.filesChanged(uri)),
-      watcher.onDidDelete((uri) => this.filesChanged(uri)),
-      watcher.onDidChange((uri) => {
-        // A saved Markdown file may have gained or lost headings; other changes cannot break a link.
-        if (MARKDOWN_FILE.test(uri.path)) this.filesChanged(uri);
-      }),
       workspace.onDidCreateFiles(() => this.filesChanged()),
       workspace.onDidDeleteFiles(() => this.filesChanged()),
       workspace.onDidRenameFiles(() => this.filesChanged()),
       workspace.onDidChangeWorkspaceFolders(() => this.filesChanged()),
       workspace.onDidOpenTextDocument((document) => {
+        if (!this.checked(document)) return;
         this.watchFolders();
         this.schedule(document, 0);
       }),
@@ -99,7 +93,9 @@ export class LinkChecker implements vscode.Disposable {
       }),
       workspace.onDidCloseTextDocument((document) => this.closed(document)),
       workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('seamlessMarkdown.checkLinks')) this.refreshAll();
+        if (!e.affectsConfiguration('seamlessMarkdown.checkLinks')) return;
+        this.watchFolders();
+        this.refreshAll();
       }),
       vscode.languages.registerCodeActionsProvider(
         { language: 'markdown' },
@@ -130,7 +126,13 @@ export class LinkChecker implements vscode.Disposable {
     // An open document counts as it is on screen, saved or not.
     const key = uri.toString();
     const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === key);
-    if (open) return scanText(toLF(open.getText()));
+    if (open) {
+      const known = this.openAnchors.get(open);
+      if (known?.version === open.version) return known.anchors;
+      const anchors = scanText(toLF(open.getText()));
+      this.openAnchors.set(open, { version: open.version, anchors });
+      return anchors;
+    }
     info.anchors ??= Promise.resolve(vscode.workspace.fs.readFile(uri)).then(
       (bytes) => (bytes.byteLength > MAX_ANCHOR_FILE_BYTES ? null : scanText(toLF(new TextDecoder('utf-8').decode(bytes)))),
       () => null,
@@ -139,7 +141,7 @@ export class LinkChecker implements vscode.Disposable {
   }
 
   private async checkOne(document: vscode.Uri, target: Target): Promise<LinkIssue | null> {
-    if (typeof target.path !== 'string' || target.path === '') return null;
+    if (typeof target.path !== 'string' || target.path === '' || document.scheme === 'untitled') return null;
     let uri: vscode.Uri;
     try {
       uri = resolveLinkPath(document, target.path);
@@ -161,21 +163,72 @@ export class LinkChecker implements vscode.Disposable {
 
   /** Files were created, deleted, renamed or saved: forget what was seen and look again. */
   private filesChanged(uri?: vscode.Uri): void {
-    if (uri && /\/(?:\.git|node_modules)\//.test(uri.path)) return;
-    clearTimeout(this.filesTimer);
+    if (this.filesTimer !== undefined) return;
+    if (uri && !this.concerns(uri)) return;
     this.filesTimer = setTimeout(() => {
-      this.files.clear();
+      this.filesTimer = undefined;
+      // Entries go stale rather than away: their keys say which files the links care about.
+      for (const entry of this.files.values()) entry.at = 0;
       this.refreshAll();
       this.recheck();
     }, FILES_DELAY_MS);
   }
 
+  /**
+   * True when a link asked about this file or something inside this folder. Everything
+   * else that happens in the workspace (build output, node_modules, .git) costs one look here.
+   */
+  private concerns(uri: vscode.Uri): boolean {
+    const key = uri.toString();
+    if (this.files.has(key)) return true;
+    const prefix = key.endsWith('/') ? key : key + '/';
+    for (const known of this.files.keys()) if (known.startsWith(prefix)) return true;
+    return false;
+  }
+
+  /**
+   * Whether this document gets diagnostics: a Markdown file that is open in this editor
+   * (or was, until it closes), or one inside a workspace folder and not under node_modules.
+   * A file from somewhere else that merely passes through the text editor is left alone.
+   */
+  private checked(document: vscode.TextDocument): boolean {
+    if (!isMarkdown(document) || !enabled(document.uri)) return false;
+    // A buffer that was never saved has no folder for its links to start from.
+    if (document.uri.scheme === 'untitled') return false;
+    if (this.adopted.has(document.uri.toString())) return true;
+    return !!vscode.workspace.getWorkspaceFolder(document.uri) && !/\/node_modules\//.test(document.uri.path);
+  }
+
+  /** Called when a document is opened in this editor. */
+  adopt(document: vscode.TextDocument): void {
+    this.adopted.add(document.uri.toString());
+    this.watchFolders();
+    this.schedule(document, 0);
+  }
+
+  /** Watches only while something is being checked, so nothing runs when the setting is off. */
   private watchFolders(): void {
     const wanted = new Map<string, vscode.Uri>();
+    let any = false;
     for (const document of vscode.workspace.textDocuments) {
-      if (document.uri.scheme !== 'file' || !checkable(document) || vscode.workspace.getWorkspaceFolder(document.uri)) continue;
+      if (!this.checked(document)) continue;
+      any = true;
+      if (document.uri.scheme !== 'file' || vscode.workspace.getWorkspaceFolder(document.uri)) continue;
       const dir = dirOf(document.uri);
       wanted.set(dir.toString(), dir);
+    }
+    if (any && !this.workspaceWatcher) {
+      const watcher = vscode.workspace.createFileSystemWatcher('**/*');
+      this.workspaceWatcher = vscode.Disposable.from(
+        watcher,
+        watcher.onDidCreate((uri) => this.filesChanged(uri)),
+        watcher.onDidDelete((uri) => this.filesChanged(uri)),
+        // A saved Markdown file may have gained or lost headings.
+        watcher.onDidChange((uri) => this.filesChanged(uri)),
+      );
+    } else if (!any && this.workspaceWatcher) {
+      this.workspaceWatcher.dispose();
+      this.workspaceWatcher = undefined;
     }
     for (const [key, watcher] of this.folderWatchers) {
       if (wanted.has(key)) continue;
@@ -189,9 +242,7 @@ export class LinkChecker implements vscode.Disposable {
       const events = [
         watcher.onDidCreate((uri) => this.filesChanged(uri)),
         watcher.onDidDelete((uri) => this.filesChanged(uri)),
-        watcher.onDidChange((uri) => {
-          if (MARKDOWN_FILE.test(uri.path)) this.filesChanged(uri);
-        }),
+        watcher.onDidChange((uri) => this.filesChanged(uri)),
       ];
       this.folderWatchers.set(key, vscode.Disposable.from(watcher, ...events));
     }
@@ -200,8 +251,12 @@ export class LinkChecker implements vscode.Disposable {
   /* ---------- diagnostics ---------- */
 
   private schedule(document: vscode.TextDocument, delay: number): void {
-    if (!checkable(document)) return;
     const key = document.uri.toString();
+    if (!this.checked(document)) {
+      // Switched off, or not ours: make sure nothing stays behind.
+      if (this.published.has(key)) this.clear(document.uri);
+      return;
+    }
     clearTimeout(this.timers.get(key));
     this.timers.set(
       key,
@@ -226,6 +281,7 @@ export class LinkChecker implements vscode.Disposable {
     clearTimeout(this.timers.get(key));
     this.timers.delete(key);
     this.signatures.delete(key);
+    this.adopted.delete(key);
     this.clear(document.uri);
     this.watchFolders();
   }
@@ -241,7 +297,7 @@ export class LinkChecker implements vscode.Disposable {
   private async refresh(document: vscode.TextDocument): Promise<void> {
     if (document.isClosed) return;
     const key = document.uri.toString();
-    if (!enabled(document.uri) || document.getText().length > MAX_DOCUMENT_CHARS) {
+    if (!this.checked(document) || document.getText().length > MAX_DOCUMENT_CHARS) {
       this.clear(document.uri);
       return;
     }
@@ -272,7 +328,7 @@ export class LinkChecker implements vscode.Disposable {
     );
 
     // Links in other files may point at the headings of this one.
-    const signature = [...result.scan.headings.map((h) => h.slug), ...result.scan.htmlIds].join('\n');
+    const signature = [...result.scan.headings.map((h) => h.slug), ...result.scan.htmlIds, ...result.scan.lineSlugs].join('\n');
     const before = this.signatures.get(key);
     this.signatures.set(key, signature);
     if (before !== undefined && before !== signature) {
@@ -303,6 +359,7 @@ export class LinkChecker implements vscode.Disposable {
 
   dispose(): void {
     clearTimeout(this.filesTimer);
+    this.workspaceWatcher?.dispose();
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
     for (const watcher of this.folderWatchers.values()) watcher.dispose();

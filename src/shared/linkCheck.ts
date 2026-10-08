@@ -3,9 +3,7 @@
 // the document, and wording the findings. Used by the webview and the extension host.
 import { IterMode, type SyntaxNode, type Tree } from '@lezer/common';
 import { markdownParser } from './markdownSyntax';
-import { slugify } from './textUtil';
-
-export type Slice = (from: number, to: number) => string;
+import { extractHeadings, headingSlugs, slugify } from './textUtil';
 
 export interface LinkOccurrence {
   /** What gets underlined: the whole link or image, or the URL of a definition. */
@@ -14,9 +12,9 @@ export interface LinkOccurrence {
   kind: 'link' | 'image' | 'definition';
   /** Target as written, or null for a reference link whose label has no definition. */
   href: string | null;
-  /** Where `href` is written; inside the definition for reference links. -1 when there is none. */
+  /** Where `href` is written. -1 when there is none. */
   hrefFrom: number;
-  /** Label of a reference link, as written. */
+  /** Label of a reference link without a definition, as written. */
   label?: string;
 }
 
@@ -24,10 +22,8 @@ export interface HeadingAnchor {
   /** Start of the heading in the document. */
   from: number;
   text: string;
-  /** GitHub-style slug, numbered when the heading repeats. */
+  /** GitHub-style slug from `headingSlugs`, numbered when the heading repeats. */
   slug: string;
-  /** The same with underscores kept, which is what GitHub does for `snake_case`. */
-  alt: string;
 }
 
 export interface DocumentScan {
@@ -35,7 +31,16 @@ export interface DocumentScan {
   headings: HeadingAnchor[];
   /** `id` and `name` attributes of raw HTML, which are anchors too. */
   htmlIds: string[];
+  /**
+   * Slugs as the table of contents numbers them (`extractHeadings`, which reads lines and
+   * so skips headings inside quotes and lists). Accepted as well, so a generated table of
+   * contents is never reported even where the two ways of counting repeats differ.
+   */
+  lineSlugs: string[];
 }
+
+/** The part of a scan that says which anchors a document has. */
+export type Anchors = Pick<DocumentScan, 'headings' | 'htmlIds' | 'lineSlugs'>;
 
 /** A link target that points at a file, split and decoded. */
 export interface Target {
@@ -105,14 +110,7 @@ export function splitTarget(href: string): Target | null {
   return { path: decode(path), anchor: decode(anchor) };
 }
 
-/** Numbers repeated slugs the way GitHub does: `intro`, `intro-1`, `intro-2`. */
-function numbered(seen: Map<string, number>, base: string): string {
-  const count = seen.get(base) ?? 0;
-  seen.set(base, count + 1);
-  return count ? `${base}-${count}` : base;
-}
-
-function headingText(node: SyntaxNode, slice: Slice): string {
+function headingText(node: SyntaxNode, slice: (from: number, to: number) => string): string {
   const marks = node.getChildren('HeaderMark');
   if (node.name.startsWith('Setext')) {
     const end = marks.length ? marks[marks.length - 1].from : node.to;
@@ -124,20 +122,19 @@ function headingText(node: SyntaxNode, slice: Slice): string {
   return slice(from, Math.max(from, to)).trim();
 }
 
-const HTML_ID = /\b(?:id|name)\s*=\s*(?:"([^"]+)"|'([^']+)')/gi;
+const HTML_ID = /\b(?:id|name)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))/gi;
 
 /**
  * Collects the links, images, reference definitions and headings of a document in one
  * walk over its syntax tree. Code, math, front matter and raw HTML are not looked into.
  */
-export function scanDocument(tree: Tree, slice: Slice): DocumentScan {
+export function scanDocument(tree: Tree, text: string): DocumentScan {
+  const slice = (from: number, to: number) => text.slice(from, to);
   const links: LinkOccurrence[] = [];
   const headings: HeadingAnchor[] = [];
   const htmlIds: string[] = [];
   const definitions = new Map<string, { href: string; hrefFrom: number }>();
-  const references: { from: number; to: number; kind: 'link' | 'image'; key: string; label: string; explicit: boolean }[] = [];
-  const seen = new Map<string, number>();
-  const seenAlt = new Map<string, number>();
+  const references: { from: number; to: number; kind: 'link' | 'image'; key: string; label: string }[] = [];
 
   const hrefOf = (url: SyntaxNode): { href: string; hrefFrom: number } => {
     const raw = slice(url.from, url.to);
@@ -161,13 +158,15 @@ export function scanDocument(tree: Tree, slice: Slice): DocumentScan {
         case 'CommentBlock':
         case 'Comment':
         case 'Autolink':
+        case 'FootnoteReference':
+        case 'FootnoteLabel':
           return false;
 
         case 'HTMLBlock':
         case 'HTMLTag': {
-          const text = slice(ref.from, ref.to);
+          const html = slice(ref.from, ref.to);
           HTML_ID.lastIndex = 0;
-          for (let m = HTML_ID.exec(text); m; m = HTML_ID.exec(text)) htmlIds.push(m[1] ?? m[2]);
+          for (let m = HTML_ID.exec(html); m; m = HTML_ID.exec(html)) htmlIds.push(m[1] ?? m[2] ?? m[3]);
           return false;
         }
 
@@ -193,54 +192,50 @@ export function scanDocument(tree: Tree, slice: Slice): DocumentScan {
             const url = node.getChild('URL');
             if (url) links.push({ from: ref.from, to: ref.to, kind, ...hrefOf(url) });
           } else {
-            const labelNode = node.getChild('LinkLabel');
-            const written = labelNode ? slice(labelNode.from + 1, labelNode.to - 1) : '';
-            const label = written.trim() ? written : slice(marks[0].to, marks[1].from);
             // "[text]" on its own is only a link when a definition exists; otherwise it is plain text.
-            references.push({ from: ref.from, to: ref.to, kind, key: normalizeLabel(label), label, explicit: !!labelNode });
+            // So is "matrix[i][j]": brackets glued to a word are indexing, not a reference.
+            const labelNode = node.getChild('LinkLabel');
+            if (labelNode && !(ref.from > 0 && /[\p{L}\p{N}_)\]]/u.test(text[ref.from - 1]))) {
+              const written = slice(labelNode.from + 1, labelNode.to - 1);
+              // "[text][^1]" is bracketed text followed by a footnote.
+              if (written.startsWith('^')) return true;
+              const label = written.trim() ? written : slice(marks[0].to, marks[1].from);
+              references.push({ from: ref.from, to: ref.to, kind, key: normalizeLabel(label), label });
+            }
           }
           return true;
         }
 
         default:
-          if (/^(?:ATX|Setext)Heading[1-6]$/.test(name)) {
-            const text = headingText(ref.node, slice);
-            // Slugs come from the text a reader sees: link targets and emphasis marks are dropped.
-            const plain = text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
-            headings.push({
-              from: ref.from,
-              text,
-              slug: numbered(seen, slugify(plain.replace(/[*_`~]/g, ''))),
-              alt: numbered(seenAlt, slugify(plain.replace(/[*`~]/g, ''))),
-            });
-          }
+          if (/^(?:ATX|Setext)Heading[1-6]$/.test(name)) headings.push({ from: ref.from, text: headingText(ref.node, slice), slug: '' });
           return true;
       }
     },
   });
 
+  // A reference link with a definition is not listed: its target is checked once, where it is written.
   for (const r of references) {
-    const definition = definitions.get(r.key);
-    if (definition) links.push({ from: r.from, to: r.to, kind: r.kind, ...definition, label: r.label });
-    else if (r.explicit) links.push({ from: r.from, to: r.to, kind: r.kind, href: null, hrefFrom: -1, label: r.label });
+    if (!definitions.has(r.key)) links.push({ from: r.from, to: r.to, kind: r.kind, href: null, hrefFrom: -1, label: r.label });
   }
   links.sort((a, b) => a.from - b.from || a.to - b.to);
-  return { links, headings, htmlIds };
+  headingSlugs(headings).forEach((slug, i) => (headings[i].slug = slug));
+  return { links, headings, htmlIds, lineSlugs: headingSlugs(extractHeadings(text)) };
 }
 
 /** `scanDocument` for text that has no syntax tree yet. Expects LF line breaks. */
 export function scanText(text: string): DocumentScan {
-  return scanDocument(parseMarkdown(text), (from, to) => text.slice(from, to));
+  return scanDocument(parseMarkdown(text), text);
 }
 
 /** Every anchor a link can point at in the scanned document. */
-export function anchorSet(scan: Pick<DocumentScan, 'headings' | 'htmlIds'>): Set<string> {
-  const out = new Set<string>(scan.htmlIds);
-  for (const h of scan.headings) {
-    out.add(h.slug);
-    out.add(h.alt);
-  }
+export function anchorSet(scan: Anchors): Set<string> {
+  const out = new Set<string>([...scan.htmlIds, ...scan.lineSlugs]);
+  for (const h of scan.headings) out.add(h.slug);
   return out;
+}
+
+function suggestable(scan: Anchors): string[] {
+  return [...new Set([...scan.lineSlugs, ...scan.headings.map((h) => h.slug)])];
 }
 
 export function hasAnchor(anchors: ReadonlySet<string>, anchor: string): boolean {
@@ -250,7 +245,7 @@ export function hasAnchor(anchors: ReadonlySet<string>, anchor: string): boolean
 /** The heading a link to `anchor` points at, by the same rules as `hasAnchor`. */
 export function findHeading(headings: readonly HeadingAnchor[], anchor: string): HeadingAnchor | undefined {
   const wanted = slugify(anchor);
-  return headings.find((h) => h.slug === wanted || h.slug === anchor) ?? headings.find((h) => h.alt === wanted || h.alt === anchor);
+  return headings.find((h) => h.slug === wanted || h.slug === anchor);
 }
 
 function editDistance(a: string, b: string): number {
@@ -321,7 +316,7 @@ export function analyse(scan: DocumentScan): Analysis {
     if (target.path === '') {
       anchors ??= anchorSet(scan);
       if (hasAnchor(anchors, target.anchor)) continue;
-      slugs ??= scan.headings.map((h) => h.slug);
+      slugs ??= suggestable(scan);
       const issue: LinkIssue = { reason: 'anchor', suggestion: closestSlug(target.anchor, slugs) };
       local.push({ from: link.from, to: link.to, message: issueMessage(target, issue), reason: 'anchor', fix: anchorFix(link, issue.suggestion) });
       continue;
@@ -356,14 +351,11 @@ export function withIssues(analysis: Analysis, issues: readonly (LinkIssue | nul
 }
 
 /** Checks an anchor against the text of the Markdown file a link points at. */
-export function checkAnchor(scan: Pick<DocumentScan, 'headings' | 'htmlIds'>, anchor: string): LinkIssue | null {
+export function checkAnchor(scan: Anchors, anchor: string): LinkIssue | null {
   if (hasAnchor(anchorSet(scan), anchor)) return null;
   return {
     reason: 'anchor',
-    suggestion: closestSlug(
-      anchor,
-      scan.headings.map((h) => h.slug),
-    ),
+    suggestion: closestSlug(anchor, suggestable(scan)),
   };
 }
 
