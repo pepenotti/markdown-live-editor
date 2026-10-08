@@ -4,6 +4,7 @@ import katex from 'katex';
 import MarkdownIt, { type MarkdownIt as Markdown, type Token } from 'markdown-it';
 import { isLocalSource } from './embed';
 import { exportCss } from './exportCss';
+import { katexStyles } from './katexCss';
 import { footnoteList, footnotePlugin, referenceAnchor } from './footnotePlugin';
 import { escapeHtml, highlight } from './highlight';
 import { FRONT_MATTER_NEXT } from './markdownSyntax';
@@ -11,15 +12,19 @@ import { mathPlugin } from './mathPlugin';
 import { extractHeadings, headingPlainText, headingSlugs, slugify } from './textUtil';
 import { type WikiHref, wikiLinkPlugin } from './wikiLinkPlugin';
 
-/** Major version of Mermaid loaded from the CDN; kept equal to the one the editor bundles. */
-export const MERMAID_CDN_MAJOR = 12;
-/** Everything Mermaid loads comes from this folder; the content security policy allows nothing else. */
-export const MERMAID_CDN_BASE = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_CDN_MAJOR}/`;
-export const MERMAID_CDN_URL = `${MERMAID_CDN_BASE}dist/mermaid.esm.min.mjs`;
-
 export interface RenderOptions {
-  /** Emit `mermaid` code blocks as `<pre class="mermaid">` for the Mermaid script instead of as code. */
-  mermaid?: boolean;
+  /**
+   * The Mermaid diagrams of the document, already drawn: one SVG per `mermaid` code block
+   * in the order of `mermaidSources`, or null where a block could not be drawn. A block
+   * without an SVG is exported as its source.
+   */
+  diagrams?: readonly (string | null)[];
+  /**
+   * The KaTeX style sheet and its fonts (by file name without extension, as base64). With
+   * them math is rendered as KaTeX's HTML and `renderDocument` embeds the styles and the
+   * fonts the formulas use. Without them math is MathML, which needs neither.
+   */
+  katex?: { css: string; font: (name: string) => string | undefined };
   /** Replacement URLs for image sources, keyed by the source as it appears in the rendered HTML. */
   images?: ReadonlyMap<string, string>;
   /**
@@ -35,7 +40,9 @@ export interface Rendered {
   html: string;
   /** Text of the first heading, or empty. */
   title: string;
-  hasMermaid: boolean;
+  /** How many `mermaid` code blocks the document has, and how many of them were exported as drawings. */
+  diagrams: number;
+  diagramsDrawn: number;
 }
 
 interface Env extends Rendered {
@@ -75,10 +82,15 @@ export function stripFrontMatter(text: string): string {
   return '';
 }
 
-/** MathML only: it needs no style sheet and no fonts, so the output stays self-contained. */
-export function renderMath(tex: string, display: boolean): string {
+/**
+ * A formula as HTML. `styled` is for a document that carries the KaTeX style sheet: the
+ * formula is then KaTeX's own layout (with MathML next to it for screen readers), which
+ * looks the same in every browser and in print. Otherwise it is MathML only, which needs no
+ * style sheet and no fonts but is drawn by the browser with whatever math font it has.
+ */
+export function renderMath(tex: string, display: boolean, styled = false): string {
   try {
-    return katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: 'ignore', output: 'mathml' });
+    return katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: 'ignore', output: styled ? 'htmlAndMathml' : 'mathml' });
   } catch (err) {
     return `<code class="katex-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</code>`;
   }
@@ -104,6 +116,8 @@ function swapHtmlImages(html: string, images: ReadonlyMap<string, string> | unde
   });
 }
 
+const isMermaid = (token: Token) => token.type === 'fence' && /^mermaid(?:\s|$)/i.test(token.info.trim());
+
 const ALERT = /^\[!(note|tip|important|warning|caution)\]$/i;
 
 function build(): Markdown {
@@ -112,7 +126,7 @@ function build(): Markdown {
     linkify: true,
     highlight: (code, language) => highlight(code, language) ?? '',
   });
-  mathPlugin(md, renderMath);
+  mathPlugin(md, (tex, display, env) => renderMath(tex, display, !!ours(env).options?.katex));
   footnotePlugin(md);
   wikiLinkPlugin(md, (env) => ours(env).options?.wikiLinks);
 
@@ -187,9 +201,14 @@ function build(): Markdown {
   const fence = rules.fence!;
   rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    if (/^mermaid(?:\s|$)/i.test(token.info.trim())) {
-      ours(env).hasMermaid = true;
-      if (ours(env).options.mermaid) return `<pre class="mermaid">${escapeHtml(token.content)}</pre>\n`;
+    if (isMermaid(token)) {
+      const index = ours(env).diagrams++;
+      const svg = ours(env).options.diagrams?.[index];
+      // Mermaid's strict mode keeps scripts out of what it draws; this is the second lock on that door.
+      if (svg && /^\s*<svg[\s>]/i.test(svg) && !/<script[\s>/]/i.test(svg)) {
+        ours(env).diagramsDrawn++;
+        return `<figure class="diagram">${svg}</figure>\n`;
+      }
     }
     return fence(tokens, idx, options, env, self);
   };
@@ -219,7 +238,8 @@ function newEnv(options: RenderOptions, source = '', body = ''): Env {
     options,
     html: '',
     title: '',
-    hasMermaid: false,
+    diagrams: 0,
+    diagramsDrawn: 0,
     slugByLine: new Map(headings.map((h, i) => [h.line - offset, slugs[i]])),
     usedSlugs: new Set(slugs),
   };
@@ -244,7 +264,17 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
   const env = newEnv(options, source, body);
   const md = renderer();
   const html = md.render(body, env);
-  return { html: html + footnoteSection(md, env), title: env.title, hasMermaid: env.hasMermaid };
+  return { html: html + footnoteSection(md, env), title: env.title, diagrams: env.diagrams, diagramsDrawn: env.diagramsDrawn };
+}
+
+/** The sources of the `mermaid` code blocks of a document, in the order they are rendered. */
+export function mermaidSources(source: string): string[] {
+  const found: string[] = [];
+  const visit = (tokens: readonly Token[]) => {
+    for (const token of tokens) if (isMermaid(token)) found.push(token.content);
+  };
+  visit(renderer().parse(stripFrontMatter(source), newEnv({})));
+  return found;
 }
 
 /** Sources of the local images of a document, as they appear in the rendered HTML, without repeats. */
@@ -275,65 +305,39 @@ export interface DocumentOptions extends RenderOptions {
   fallbackTitle?: string;
   /** For printing: no dark colours. */
   print?: boolean;
-  /** Value that marks the Mermaid script as the export's own. Random unless given. */
-  nonce?: string;
-}
-
-function randomNonce(): string {
-  const bytes = new Uint8Array(18);
-  globalThis.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
  * The policy of an exported file. The document's own HTML is passed through, but nothing in
- * it can run a script or load a frame, a style sheet or a font. Images and media the
- * document itself refers to stay as they are. With `mermaidNonce`, the one script the
- * export adds may run and load Mermaid from its CDN folder; without it no script runs at all.
+ * it can run a script or load a frame, a style sheet or a font: there is no `script-src`,
+ * and the export itself adds no script. Images and media the document itself refers to stay
+ * as they are.
  */
-export function contentSecurityPolicy(mermaidNonce?: string): string {
-  return [
-    `default-src 'none'`,
-    `img-src * data: blob:`,
-    `media-src * data: blob:`,
-    `style-src 'unsafe-inline'`,
-    `font-src data:`,
-    `base-uri 'none'`,
-    `form-action 'none'`,
-    ...(mermaidNonce ? [`script-src 'nonce-${mermaidNonce}' ${MERMAID_CDN_BASE}`] : []),
-  ].join('; ');
-}
-
-function mermaidScript(print: boolean, nonce: string): string {
-  const theme = print ? `'default'` : `matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'`;
-  return `<script type="module" nonce="${nonce}">
-import mermaid from '${MERMAID_CDN_URL}';
-mermaid.initialize({ startOnLoad: false, theme: ${theme} });
-await mermaid.run({ querySelector: 'pre.mermaid' });
-</script>\n`;
+export function contentSecurityPolicy(): string {
+  return [`default-src 'none'`, `img-src * data: blob:`, `media-src * data: blob:`, `style-src 'unsafe-inline'`, `font-src data:`, `base-uri 'none'`, `form-action 'none'`].join('; ');
 }
 
 /** A complete, self-contained HTML document. */
 export function renderDocument(source: string, options: DocumentOptions = {}): Rendered {
   const body = renderMarkdown(source, options);
   const title = body.title || options.fallbackTitle || 'Untitled';
-  const nonce = body.hasMermaid && options.mermaid ? (options.nonce ?? randomNonce()).replace(/[^A-Za-z0-9+/=_-]/g, '') : undefined;
+  const math = options.katex ? katexStyles(body.html, options.katex.css, options.katex.font) : '';
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(nonce)}">
+<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy()}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Seamless Markdown">
 <title>${escapeHtml(title)}</title>
 <style>
-${exportCss(options.print === true)}</style>
+${exportCss(options.print === true)}${math ? `${math}\n` : ''}</style>
 </head>
 <body>
 <main class="markdown-body">
 ${body.html}</main>
-${nonce ? mermaidScript(options.print === true, nonce) : ''}</body>
+</body>
 </html>
 `;
-  return { html, title, hasMermaid: body.hasMermaid };
+  return { ...body, html, title };
 }

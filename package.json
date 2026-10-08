@@ -39,6 +39,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "npm run build && vscode-test",
+    "test:vsix": "node scripts/test-vsix.mjs",
     "harness": "python3 -m http.server 5173",
     "package": "npm run build -- --production && vsce package --no-dependencies",
     "screenshots": "node scripts/screenshots.mjs",
@@ -126,7 +127,7 @@
       },
       {
         "command": "seamlessMarkdown.pickMode",
-        "title": "Choose Mode…",
+        "title": "Choose Mode\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -176,7 +177,7 @@
       },
       {
         "command": "seamlessMarkdown.insertImage",
-        "title": "Insert Image…",
+        "title": "Insert Image\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -256,7 +257,7 @@
       },
       {
         "command": "seamlessMarkdown.goToHeading",
-        "title": "Go to Heading…",
+        "title": "Go to Heading\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -286,12 +287,12 @@
       },
       {
         "command": "seamlessMarkdown.exportHtml",
-        "title": "Export as HTML…",
+        "title": "Export as HTML\u2026",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.exportPdf",
-        "title": "Export as PDF…",
+        "title": "Export as PDF\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -546,15 +547,15 @@
         },
         {
           "command": "seamlessMarkdown.copyAsHtml",
-          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+          "when": "resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
           "command": "seamlessMarkdown.exportHtml",
-          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+          "when": "resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
           "command": "seamlessMarkdown.exportPdf",
-          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+          "when": "!seamlessMarkdown.pdfUnavailable && (resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor')"
         },
         {
           "command": "seamlessMarkdown.revealLine",
@@ -575,6 +576,16 @@
           "command": "seamlessMarkdown.openSource",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'",
           "group": "navigation"
+        },
+        {
+          "command": "seamlessMarkdown.exportHtml",
+          "when": "(resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
+          "group": "seamlessMarkdown.export@1"
+        },
+        {
+          "command": "seamlessMarkdown.exportPdf",
+          "when": "!seamlessMarkdown.pdfUnavailable && (resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
+          "group": "seamlessMarkdown.export@2"
         }
       ],
       "explorer/context": [
@@ -582,6 +593,16 @@
           "command": "seamlessMarkdown.openWith",
           "when": "resourceLangId == markdown",
           "group": "navigation@90"
+        },
+        {
+          "command": "seamlessMarkdown.exportHtml",
+          "when": "resourceLangId == markdown",
+          "group": "seamlessMarkdown.export@1"
+        },
+        {
+          "command": "seamlessMarkdown.exportPdf",
+          "when": "resourceLangId == markdown && !seamlessMarkdown.pdfUnavailable",
+          "group": "seamlessMarkdown.export@2"
         }
       ]
     },
@@ -682,18 +703,13 @@
         "seamlessMarkdown.export.embedImages": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Embed local images in the file written by **Export as HTML**, so that it can be moved or sent on its own. When off, images keep their relative paths."
-        },
-        "seamlessMarkdown.export.mermaidFromCdn": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Draw Mermaid diagrams in exported files by loading Mermaid from the jsDelivr CDN when the file is opened. When off, a diagram is exported as its source in a code block and the file needs no network."
+          "markdownDescription": "Embed local images in the file written by **Export as HTML**, so that it can be moved or sent on its own. When off, images keep their relative paths. A PDF always contains its images."
         },
         "seamlessMarkdown.export.browserPath": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "markdownDescription": "Path of the Chrome, Edge or Chromium executable used by **Create PDF now** in **Export as PDF**. Empty looks in the usual places."
+          "markdownDescription": "Path of the Chrome, Edge, Chromium or Brave executable that **Export as PDF** prints with and that draws Mermaid diagrams for both exports. Empty looks in the usual places. Without such a browser PDF export is not offered, and diagrams are exported as their source."
         },
         "seamlessMarkdown.spellCheck": {
           "type": "boolean",

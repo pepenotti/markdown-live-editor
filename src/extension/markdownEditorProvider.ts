@@ -17,6 +17,8 @@ import {
   type TextChange,
   VIEW_TYPE,
   type WebviewMessage,
+  EXPORT_ACTIONS,
+  type ExportAction,
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
@@ -33,7 +35,10 @@ export interface Stats {
 
 type DebugState = Extract<WebviewMessage, { type: 'debugState' }>;
 
-function readConfig(resource: vscode.Uri): EditorConfig {
+/** What the editor's Export menu needs to know. */
+export type ExportState = Pick<EditorConfig, 'canExportPdf' | 'exportPdfHint'>;
+
+function readConfig(resource: vscode.Uri, exporting: ExportState): EditorConfig {
   const c = vscode.workspace.getConfiguration('seamlessMarkdown', resource);
   const mode = c.get<string>('defaultMode', 'half');
   return {
@@ -49,6 +54,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     spellCheck: c.get<boolean>('spellCheck', false),
     checkLinks: c.get<boolean>('checkLinks', true),
     wikiLinks: c.get<boolean>('wikiLinks', false),
+    ...exporting,
   };
 }
 
@@ -100,7 +106,7 @@ export class Session implements SyncTarget {
         this.sync.documentChanged(reason);
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('seamlessMarkdown', document.uri)) this.post({ type: 'config', config: readConfig(document.uri) });
+        if (e.affectsConfiguration('seamlessMarkdown', document.uri)) this.postConfig();
       }),
     );
   }
@@ -139,6 +145,16 @@ export class Session implements SyncTarget {
     this.post({ type: 'command', id, arg });
   }
 
+  /** Sends the settings to the editor again, after one of them changed. */
+  postConfig(): void {
+    this.post({ type: 'config', config: readConfig(this.document.uri, this.provider.exportState) });
+  }
+
+  /** Handles a message as if the editor had sent it (for the tests). */
+  receive(message: WebviewMessage): void {
+    this.onMessage(message);
+  }
+
   private onMessage(message: WebviewMessage): void {
     switch (message.type) {
       case 'ready': {
@@ -150,7 +166,7 @@ export class Session implements SyncTarget {
           text,
           epoch,
           mode: this.mode,
-          config: readConfig(this.document.uri),
+          config: readConfig(this.document.uri, this.provider.exportState),
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
@@ -191,6 +207,10 @@ export class Session implements SyncTarget {
         break;
       case 'openWikiLink':
         void this.provider.openWikiLink(this, String(message.target ?? ''), String(message.heading ?? ''));
+        break;
+      case 'export':
+        // The toolbar's Export menu. Anything but the three known actions is ignored.
+        if (EXPORT_ACTIONS.includes(message.action)) this.provider.exportHandler?.(this, message.action);
         break;
       case 'request':
         void this.onRequest(message.reqId, message.kind, message.payload);
@@ -349,6 +369,16 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   /** Looks at the file system for broken links and publishes them as diagnostics. */
   readonly links: LinkChecker;
 
+  /** Whether PDF export is available; shown by the Export menu of every editor. */
+  exportState: ExportState = { canExportPdf: false, exportPdfHint: '' };
+  /** Runs what the Export menu of an editor asked for. Set by the extension once the commands exist. */
+  exportHandler: ((session: Session, action: ExportAction) => void) | undefined;
+
+  setExportState(state: ExportState): void {
+    this.exportState = state;
+    for (const session of this.sessions) if (session.ready) session.postConfig();
+  }
+
   /** The file watchers the link checker and the index of notes share. */
   readonly watch = new FileWatch();
   /** The Markdown files that wiki links can point to. Does nothing while wiki links are off. */
@@ -407,7 +437,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   initialMode(document: vscode.TextDocument): Mode {
     const config = vscode.workspace.getConfiguration('seamlessMarkdown', document.uri);
-    const fallback = readConfig(document.uri).defaultMode;
+    const fallback = readConfig(document.uri, this.exportState).defaultMode;
     if (!config.get<boolean>('rememberModePerFile', true)) return fallback;
     const saved = this.context.workspaceState.get<string>(this.modeKey(document));
     return saved && (MODES as readonly string[]).includes(saved) ? (saved as Mode) : fallback;

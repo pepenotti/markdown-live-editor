@@ -59,7 +59,9 @@ thead tr,tbody tr:nth-child(2n){background:var(--soft)}
 .math-block{overflow-x:auto;overflow-y:hidden;text-align:center}
 math{font-size:1.1em}
 .katex-error{color:var(--k)}
-pre.mermaid{text-align:center;background:none}
+.diagram{margin:0 0 1em;text-align:center;overflow-x:auto}
+.diagram svg{max-width:100%;height:auto}
+.katex-display{margin:0}
 .tok-comment,.tok-meta{color:var(--muted)}
 .tok-keyword,.tok-operator,.tok-deleted{color:var(--k)}
 .tok-string,.tok-string2,.tok-url,.tok-link{color:var(--s)}
@@ -78,7 +80,7 @@ body{font-size:11pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .markdown-body{max-width:none;padding:0}
 h1,h2,h3,h4,h5,h6{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}
 p,li{orphans:3;widows:3}
-pre,blockquote,img,svg,tr,.math-block,.footnotes li{break-inside:avoid;page-break-inside:avoid}
+pre,blockquote,img,svg,tr,.math-block,.diagram,.footnotes li{break-inside:avoid;page-break-inside:avoid}
 pre,pre code{white-space:pre-wrap;overflow-wrap:anywhere}
 pre{overflow:visible}
 table{display:table;width:auto;overflow:visible}
@@ -89,6 +91,7 @@ a{text-decoration:underline}
 
 /** The style sheet of an exported document. The print variant has no dark colours. */
 export function exportCss(print: boolean): string {
-  const dark = print ? '' : `@media (prefers-color-scheme:dark){:root{color-scheme:dark;${DARK}}}\n`;
+  // Diagrams are drawn in light colours, so on a dark page they sit on a light card.
+  const dark = print ? '' : `@media (prefers-color-scheme:dark){:root{color-scheme:dark;${DARK}}.diagram{padding:12px;border-radius:6px;background:#fff;color:#1f2328}}\n`;
   return `:root{color-scheme:${print ? 'only light' : 'light dark'};${LIGHT}}\n${dark}${BASE.trim()}\n${PRINT.trim()}\n`;
 }
