@@ -375,6 +375,11 @@ body {
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
+/* A wiki link to a note that does not exist yet. */
+#app .cm-md-wikilink-missing {
+  color: var(--mdl-dim);
+  text-decoration-style: dashed;
+}
 #app .cm-md-url {
   word-break: break-all;
 }

@@ -97,6 +97,34 @@ export const math: MarkdownConfig = {
   ],
 };
 
+/**
+ * Wiki links: `[[Note]]`, `[[Note#Heading]]`, `[[Note|shown text]]`. Not standard Markdown,
+ * so this is only added to the parser when the setting asks for it.
+ */
+export const wikiLink: MarkdownConfig = {
+  defineNodes: [{ name: 'WikiLink' }, { name: 'WikiLinkMark', style: t.processingInstruction }],
+  parseInline: [
+    {
+      name: 'WikiLink',
+      before: 'Link',
+      parse(cx, next, pos) {
+        if (next !== 91 || cx.char(pos + 1) !== 91) return -1;
+        let blank = true;
+        for (let i = pos + 2; i < cx.end; i++) {
+          const ch = cx.char(i);
+          if (ch === 10 || ch === 91) return -1;
+          if (ch === 93) {
+            if (blank || cx.char(i + 1) !== 93) return -1;
+            return cx.addElement(cx.elt('WikiLink', pos, i + 2, [cx.elt('WikiLinkMark', pos, pos + 2), cx.elt('WikiLinkMark', i, i + 2)]));
+          }
+          if (ch !== 32 && ch !== 9) blank = false;
+        }
+        return -1;
+      },
+    },
+  ],
+};
+
 /** The TeX inside a math node's text. */
 export function texOf(source: string): string {
   const width = source.startsWith('$$') ? 2 : 1;
@@ -104,10 +132,10 @@ export function texOf(source: string): string {
   return source.slice(width, end).trim();
 }
 
-export function markdownSupport() {
+export function markdownSupport(options: { wikiLinks?: boolean } = {}) {
   return markdown({
     base: commonmarkLanguage,
-    extensions: [GFM, frontMatter, math],
+    extensions: [GFM, frontMatter, math, ...(options.wikiLinks ? [wikiLink] : [])],
     codeLanguages: languages,
     addKeymap: false,
     completeHTMLTags: false,

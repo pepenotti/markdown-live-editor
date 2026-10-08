@@ -46,6 +46,7 @@ import { tableFromTSV } from './table/model';
 import { completions, insideCode } from './ui/completions';
 import { createToolbar, type Toolbar } from './ui/toolbar';
 import { activeTableCell, focusTableAt, wrapInActiveCell } from './widgets/table';
+import { refreshNotes, wikiLinkAt, wikiResolver } from './wikiLinks';
 
 const host = new HostBridge();
 const problems: string[] = [];
@@ -67,6 +68,10 @@ let config: EditorConfig;
 let isMac = /Mac/.test(navigator.platform);
 let resolveUrl: (src: string) => string = (s) => s;
 const renderCompartment = new Compartment();
+const languageCompartment = new Compartment();
+/** Whether the parser currently knows wiki links. */
+let wikiLinks = false;
+const language = (): Extension => [markdownSupport({ wikiLinks }), wikiLinks ? wikiResolver(host) : []];
 
 const markdownHighlighter = tagHighlighter([
   { tag: tags.monospace, class: 'tok-monospace' },
@@ -111,6 +116,10 @@ function applyConfig(next: EditorConfig): void {
   custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
+  if (view && !!next.wikiLinks !== wikiLinks) {
+    wikiLinks = !!next.wikiLinks;
+    view.dispatch({ effects: languageCompartment.reconfigure(language()) });
+  }
 }
 
 /* ---------- commands ---------- */
@@ -159,6 +168,11 @@ function revealAnchor(anchor: string): void {
 function openLink(href: string): void {
   if (href.startsWith('#')) revealAnchor(href);
   else if (href) host.post({ type: 'openLink', href });
+}
+
+function openWikiLink(target: string, heading: string): void {
+  if (target) host.post({ type: 'openWikiLink', target, heading });
+  else if (heading) revealAnchor(encodeURIComponent(heading));
 }
 
 async function pickImages(): Promise<LinkedFile[]> {
@@ -310,6 +324,12 @@ const domHandlers = EditorView.domEventHandlers({
   mousedown(event, v) {
     if (event.button !== 0 || !(isMac ? event.metaKey : event.ctrlKey)) return false;
     const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+    const wiki = pos === null ? null : wikiLinkAt(v.state, pos);
+    if (wiki) {
+      event.preventDefault();
+      openWikiLink(wiki.target, wiki.heading);
+      return true;
+    }
     const href = pos === null ? null : (hrefAt(v.state, pos) ?? hrefAt(v.state, Math.min(pos + 1, v.state.doc.length)));
     if (!href) return false;
     event.preventDefault();
@@ -423,6 +443,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   isMac = message.isMac;
   resolveUrl = makeResolver(message.baseUri, message.rootUri);
   config = message.config;
+  wikiLinks = !!message.config.wikiLinks;
   applyConfig(message.config);
 
   toolbar = createToolbar(runCommand, isMac);
@@ -439,8 +460,8 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   const extensions: Extension[] = [
     modeField.init(() => message.mode),
     renderCompartment.of(renderConfig.of(currentRenderConfig())),
-    hostActions.of({ openLink, pickImages }),
-    markdownSupport(),
+    hostActions.of({ openLink, openWikiLink, pickImages }),
+    languageCompartment.of(language()),
     syntaxHighlighting(classHighlighter),
     syntaxHighlighting(markdownHighlighter),
     EditorView.lineWrapping,
@@ -464,7 +485,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     // VS Code owns undo for the document; only the standalone page keeps its own history.
     host.standalone ? [history(), keymap.of(historyKeymap)] : [],
     search({ top: true }),
-    completions(host, runCommand),
+    completions(host, runCommand, () => wikiLinks),
     keymap.of([
       ...KEYS.map(({ key, id }) => ({
         key,
@@ -529,6 +550,9 @@ host.onMessage((message) => {
     case 'command':
       runCommand(message.id, message.arg);
       break;
+    case 'notesChanged':
+      view?.dispatch({ effects: refreshNotes.of(null) });
+      break;
     case 'flush':
       sync?.flush();
       host.post({ type: 'flushed', reqId: message.reqId });
@@ -540,11 +564,14 @@ host.onMessage((message) => {
         text: view?.state.doc.toString() ?? '',
         mode: view?.state.field(modeField) ?? 'raw',
         epoch: sync?.epoch ?? -1,
+        cursorLine: view ? view.state.doc.lineAt(view.state.selection.main.head).number - 1 : 0,
         problems: [...problems],
         rendered: {
           diagrams: document.querySelectorAll('.cm-md-mermaid[data-state="done"] svg').length,
           diagramErrors: document.querySelectorAll('.cm-md-mermaid[data-state="error"]').length,
           math: document.querySelectorAll('.cm-md-math .katex').length,
+          wikiLinks: document.querySelectorAll('.cm-md-wikilink').length,
+          wikiLinksMissing: document.querySelectorAll('.cm-md-wikilink-missing').length,
         },
       });
       break;

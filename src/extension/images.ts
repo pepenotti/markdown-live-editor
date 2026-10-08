@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { IMAGE_EXTENSIONS, isImagePath, type LinkedFile } from '../shared/protocol';
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-const EXCLUDE = '**/{node_modules,.git,dist,out,build,.next,.venv,target}/**';
+export const EXCLUDE ='**/{node_modules,.git,dist,out,build,.next,.venv,target}/**';
 
 function dirOf(uri: vscode.Uri): vscode.Uri {
   return vscode.Uri.joinPath(uri, '..');

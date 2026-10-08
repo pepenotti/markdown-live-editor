@@ -5,7 +5,7 @@ import { markdownSupport } from '../../src/webview/markdown';
 /**
  * Builds a state from text where `¦` marks a cursor and `⟦…⟧` a selection.
  */
-export function stateOf(marked: string, extensions: Extension[] = []): EditorState {
+export function stateOf(marked: string, extensions: Extension[] = [], options: { wikiLinks?: boolean } = {}): EditorState {
   let doc = '';
   let anchor = -1;
   let head = -1;
@@ -18,7 +18,7 @@ export function stateOf(marked: string, extensions: Extension[] = []): EditorSta
   const state = EditorState.create({
     doc,
     selection: anchor < 0 ? undefined : EditorSelection.single(anchor, head),
-    extensions: [markdownSupport(), EditorState.allowMultipleSelections.of(true), ...extensions],
+    extensions: [markdownSupport(options), EditorState.allowMultipleSelections.of(true), ...extensions],
   });
   ensureSyntaxTree(state, state.doc.length, 5000);
   return state;

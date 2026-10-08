@@ -2,6 +2,7 @@ import MarkdownIt from 'markdown-it';
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
+import { BacklinksProvider } from './backlinks';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
@@ -135,6 +136,12 @@ export function activate(context: vscode.ExtensionContext): unknown {
   const outline = new OutlineProvider(provider);
   context.subscriptions.push(outline, vscode.window.registerTreeDataProvider('seamlessMarkdown.outline', outline));
 
+  const backlinks = new BacklinksProvider(provider);
+  context.subscriptions.push(backlinks, vscode.window.registerTreeDataProvider('seamlessMarkdown.backlinks', backlinks));
+  register('openBacklink', (uri: vscode.Uri, line: number) => {
+    if (uri instanceof vscode.Uri) return provider.openAtLine(uri, typeof line === 'number' ? line : 0);
+  });
+
   register('copyAsHtml', async () => {
     const session = provider.active;
     if (!session) return;
@@ -209,6 +216,14 @@ export function activate(context: vscode.ExtensionContext): unknown {
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
     listFiles: async (uri: vscode.Uri, imagesOnly: boolean) => listFiles((await only(uri)).document, imagesOnly),
     resolveUris: async (uri: vscode.Uri, uris: string[]) => resolveUris((await only(uri)).document, uris),
+    resolveNotes: async (uri: vscode.Uri, names: string[]) => provider.notes.statuses(uri, names),
+    listNotes: async (uri: vscode.Uri) => provider.notes.list(uri),
+    noteHeadings: async (uri: vscode.Uri, name: string) => provider.notes.headings(uri, name),
+    backlinks: async (uri: vscode.Uri) =>
+      (await provider.notes.backlinks(uri)).map((link) => ({ path: link.uri.fsPath, lines: link.lines })),
+    openWikiLink: async (uri: vscode.Uri, target: string, heading: string, create: boolean) =>
+      provider.openWikiLink(await only(uri), target, heading, async () => create),
+    openBacklink: async (uri: vscode.Uri, line: number) => provider.openAtLine(uri, line),
   } satisfies Record<string, (uri: vscode.Uri, ...rest: any[]) => unknown>;
 }
 

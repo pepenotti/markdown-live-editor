@@ -6,8 +6,12 @@ import {
   type EditorConfig,
   type HostMessage,
   type ListFilesPayload,
+  type ListNotesResult,
   type Mode,
   MODES,
+  type NoteHeadingsPayload,
+  type ResolveNotesPayload,
+  type ResolveNotesResult,
   type ResolveUrisPayload,
   type SaveImagePayload,
   type TextChange,
@@ -16,6 +20,7 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { NoteIndex } from './notes';
 
 export interface Stats {
   words: number;
@@ -36,7 +41,18 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     customCss: c.get<string>('customCss', ''),
+    wikiLinks: c.get<boolean>('wikiLinks', false),
   };
+}
+
+async function confirmNewNote(name: string, location: vscode.Uri): Promise<boolean> {
+  const create = 'Create Note';
+  const choice = await vscode.window.showInformationMessage(
+    `There is no note called "${name}". Create it?`,
+    { modal: true, detail: `It will be saved as ${vscode.workspace.asRelativePath(location, false)}.` },
+    create,
+  );
+  return choice === create;
 }
 
 export class Session implements SyncTarget {
@@ -50,6 +66,7 @@ export class Session implements SyncTarget {
   private readonly readyWaiters: (() => void)[] = [];
   private nextId = 1;
   private pendingAnchor: string | undefined;
+  private pendingLine: number | undefined;
 
   constructor(
     private readonly provider: MarkdownEditorProvider,
@@ -135,6 +152,8 @@ export class Session implements SyncTarget {
         for (const done of this.readyWaiters.splice(0)) done();
         if (this.pendingAnchor) this.send('revealAnchor', this.pendingAnchor);
         this.pendingAnchor = undefined;
+        if (this.pendingLine !== undefined) this.send('revealLine', this.pendingLine);
+        this.pendingLine = undefined;
         break;
       }
       case 'edit':
@@ -161,6 +180,9 @@ export class Session implements SyncTarget {
         break;
       case 'openLink':
         void this.provider.openLink(this, message.href);
+        break;
+      case 'openWikiLink':
+        void this.provider.openWikiLink(this, String(message.target ?? ''), String(message.heading ?? ''));
         break;
       case 'request':
         void this.onRequest(message.reqId, message.kind, message.payload);
@@ -191,6 +213,18 @@ export class Session implements SyncTarget {
           data = { items: await resolveUris(this.document, Array.isArray(uris) ? uris.map(String) : []) };
           break;
         }
+        case 'resolveNotes': {
+          const names = (payload as ResolveNotesPayload)?.names;
+          const notes = await this.provider.notes.statuses(this.document.uri, Array.isArray(names) ? names.map(String) : []);
+          data = { notes } satisfies ResolveNotesResult;
+          break;
+        }
+        case 'listNotes':
+          data = { notes: await this.provider.notes.list(this.document.uri) } satisfies ListNotesResult;
+          break;
+        case 'noteHeadings':
+          data = { headings: await this.provider.notes.headings(this.document.uri, String((payload as NoteHeadingsPayload)?.name ?? '')) };
+          break;
         default:
           throw new Error(`Unknown request: ${kind}`);
       }
@@ -241,6 +275,11 @@ export class Session implements SyncTarget {
   revealAnchor(anchor: string): void {
     if (this.ready) this.send('revealAnchor', anchor);
     else this.pendingAnchor = anchor;
+  }
+
+  revealLine(line: number): void {
+    if (this.ready) this.send('revealLine', line);
+    else this.pendingLine = line;
   }
 
   /* ---------- set-up ---------- */
@@ -300,8 +339,18 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   readonly onDidChange = this.changed.event;
   private readonly channel = vscode.window.createOutputChannel('Seamless Markdown');
 
+  /** The Markdown files that wiki links can point to. Reads nothing until it is asked. */
+  readonly notes = new NoteIndex();
+
   constructor(readonly context: vscode.ExtensionContext) {
-    context.subscriptions.push(this.changed, this.channel);
+    context.subscriptions.push(
+      this.changed,
+      this.channel,
+      this.notes,
+      this.notes.onDidChangeNotes(() => {
+        for (const s of this.sessions) if (s.ready) s.post({ type: 'notesChanged' });
+      }),
+    );
   }
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
@@ -395,6 +444,48 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     } else {
       await vscode.commands.executeCommand('vscode.open', target);
     }
+  }
+
+  /**
+   * Opens the note a wiki link names and jumps to the heading, if one is given.
+   * A note that does not exist is created next to the linking document once `confirm` agrees.
+   */
+  async openWikiLink(
+    session: Session,
+    target: string,
+    heading: string,
+    confirm: (name: string, location: vscode.Uri) => Thenable<boolean> = confirmNewNote,
+  ): Promise<vscode.Uri | undefined> {
+    const from = session.document.uri;
+    let uri: vscode.Uri | undefined = target.trim() ? undefined : from;
+    if (!uri) {
+      const found = await this.notes.resolve(from, target);
+      if (found.status === 'found') {
+        uri = found.uri;
+      } else if (found.status === 'ambiguous') {
+        const items = found.uris.map((u) => ({ label: vscode.workspace.asRelativePath(u, false), uri: u }));
+        uri = (await vscode.window.showQuickPick(items, { placeHolder: `Several notes are called "${target}"` }))?.uri;
+      } else {
+        const location = this.notes.locationFor(from, target);
+        if (!location) {
+          void vscode.window.showWarningMessage(`"${target}" cannot be used as a file name.`);
+          return undefined;
+        }
+        if (!(await confirm(target, location))) return undefined;
+        await this.notes.create(location);
+        uri = location;
+      }
+    }
+    if (!uri) return undefined;
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+    if (heading) for (const s of this.sessionsFor(uri)) s.revealAnchor(encodeURIComponent(heading));
+    return uri;
+  }
+
+  /** Opens a note in this editor with the cursor on a line. */
+  async openAtLine(uri: vscode.Uri, line: number): Promise<void> {
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+    for (const s of this.sessionsFor(uri)) s.revealLine(line);
   }
 
   /* ---------- default editor ---------- */

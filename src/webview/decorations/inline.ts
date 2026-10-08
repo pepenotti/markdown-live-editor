@@ -11,6 +11,7 @@ import { renderConfig } from '../config';
 import { stripUrl } from '../inlineRender';
 import { texOf } from '../markdown';
 import { modeField, refreshDecorations } from '../modes';
+import { noteStatus, wikiLinkInfo } from '../wikiLinks';
 import { MathWidget } from '../widgets/rendered';
 import { AlertLabelWidget, CheckboxWidget, CodeHeaderWidget, FoldWidget, ImageWidget, isFoldedAt, RuleWidget } from '../widgets/simple';
 
@@ -149,6 +150,7 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
   const cfg = state.facet(renderConfig);
   const selection = state.selection.ranges;
   const decos = out.decorations;
+  const notes = state.field(noteStatus, false);
 
   const touches = (from: number, to: number) => !full && selection.some((r) => r.from <= to && r.to >= from);
   const lineActive = (pos: number) => {
@@ -340,6 +342,23 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
             else hide(from, to);
             const widget = new MathWidget(texOf(text), text.startsWith('$$'));
             decos.push(Decoration.widget({ widget, side: full ? -1 : 1 }).range(to));
+            return false;
+          }
+
+          case 'WikiLink': {
+            const info = wikiLinkInfo(doc, from, to);
+            // Until the host has answered, a link is drawn as if its note exists.
+            const status = info.target ? notes?.get(info.target) : 'found';
+            const title = status === 'missing' ? `${info.target} (no such note yet)` : status === 'ambiguous' ? `${info.target} (several notes match)` : info.target || `#${info.heading}`;
+            mark('cm-md-link cm-md-wikilink' + (status === 'missing' ? ' cm-md-wikilink-missing' : ''), info.shownFrom, info.shownTo, title);
+            if (touches(from, to)) {
+              mark('cm-md-mark', from, from + 2);
+              mark('cm-md-mark cm-md-url', from + 2, info.shownFrom);
+              mark('cm-md-mark', info.shownTo, to);
+            } else {
+              hide(from, info.shownFrom);
+              hide(info.shownTo, to);
+            }
             return false;
           }
 
@@ -591,7 +610,10 @@ export const inlinePlugin = ViewPlugin.fromClass(
       const modeChanged = u.startState.field(modeField) !== mode;
       const forced = u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshDecorations)));
       const treeChanged = syntaxTree(u.startState) !== syntaxTree(u.state);
-      const configChanged = u.startState.facet(renderConfig) !== u.state.facet(renderConfig) || foldedRanges(u.startState) !== foldedRanges(u.state);
+      const configChanged =
+        u.startState.facet(renderConfig) !== u.state.facet(renderConfig) ||
+        foldedRanges(u.startState) !== foldedRanges(u.state) ||
+        u.startState.field(noteStatus, false) !== u.state.field(noteStatus, false);
       // Only half preview depends on where the cursor is.
       const selectionMatters = u.selectionSet && mode === 'half';
       if (u.docChanged || u.viewportChanged || modeChanged || forced || treeChanged || configChanged || selectionMatters) this.build(u.view);

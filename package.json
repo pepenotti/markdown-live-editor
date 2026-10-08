@@ -265,6 +265,11 @@
         "command": "seamlessMarkdown.revealLine",
         "title": "Go to Line",
         "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.openBacklink",
+        "title": "Open Backlink",
+        "category": "Seamless Markdown"
       }
     ],
     "keybindings": [
@@ -505,6 +510,10 @@
         {
           "command": "seamlessMarkdown.revealLine",
           "when": "false"
+        },
+        {
+          "command": "seamlessMarkdown.openBacklink",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -593,6 +602,11 @@
           "default": "",
           "editPresentation": "multilineText",
           "markdownDescription": "Extra CSS rules for the editor, for example `#app .cm-content { font-family: Georgia; }`."
+        },
+        "seamlessMarkdown.wikiLinks": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Treat `[[Note]]` as a link to another Markdown file of the workspace, and show a Backlinks view in the Explorer. Wiki links are not standard Markdown, so other tools show them as plain text."
         }
       }
     },
@@ -603,6 +617,13 @@
           "name": "Markdown Outline",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'",
           "icon": "$(list-tree)",
+          "contextualTitle": "Seamless Markdown"
+        },
+        {
+          "id": "seamlessMarkdown.backlinks",
+          "name": "Backlinks",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && config.seamlessMarkdown.wikiLinks",
+          "icon": "$(references)",
           "contextualTitle": "Seamless Markdown"
         }
       ]

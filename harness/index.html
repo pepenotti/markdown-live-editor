@@ -63,6 +63,14 @@
           stats: null,
           mode: null,
           files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
+          /** Notes that wiki links resolve to (?wiki=1), with their headings. */
+          notes: { other: ['Other note'], features: ['Seamless Markdown', 'Tables'], 'notes/twice': [], 'archive/twice': [] },
+          wikiOpened: [],
+          noteStatus(name) {
+            const wanted = name.toLowerCase().replace(/\.md$/, '');
+            const hits = Object.keys(h.notes).filter((n) => n === wanted || n.split('/').pop() === wanted);
+            return hits.length === 1 ? 'found' : hits.length ? 'ambiguous' : 'missing';
+          },
           /** Pretend something else changed the document. */
           external(text, reason) {
             const a = h.mirror;
@@ -133,6 +141,7 @@
                         showToolbar: params.get('toolbar') !== '0',
                         tableAutoAlign: params.get('align') !== '0',
                         customCss: params.get('css') || '',
+                        wikiLinks: params.get('wiki') === '1',
                       },
                       baseUri: new URL('../sample', location.href).href,
                       rootUri: new URL('../sample', location.href).href,
@@ -149,6 +158,9 @@
               case 'openLink':
                 h.opened.push(msg.href);
                 break;
+              case 'openWikiLink':
+                h.wikiOpened.push({ target: msg.target, heading: msg.heading });
+                break;
               case 'stats':
                 h.stats = msg;
                 break;
@@ -157,6 +169,9 @@
                 break;
               case 'request':
                 if (msg.kind === 'listFiles') respond(msg.reqId, { files: h.files.filter((f) => !msg.payload.imagesOnly || /\.(png|svg|jpe?g|gif)$/.test(f)) });
+                else if (msg.kind === 'resolveNotes') respond(msg.reqId, { notes: Object.fromEntries(msg.payload.names.map((n) => [n, h.noteStatus(n)])) });
+                else if (msg.kind === 'listNotes') respond(msg.reqId, { notes: Object.keys(h.notes).map((n) => ({ name: n, path: n + '.md' })) });
+                else if (msg.kind === 'noteHeadings') respond(msg.reqId, { headings: h.notes[msg.payload.name.toLowerCase()] || [] });
                 else if (msg.kind === 'pickImage') respond(msg.reqId, { items: [{ path: 'assets/photo.png', isImage: true, name: 'photo.png' }] });
                 else if (msg.kind === 'saveImage') respond(msg.reqId, { path: 'assets/' + msg.payload.name, isImage: true, name: msg.payload.name });
                 else if (msg.kind === 'resolveUris') respond(msg.reqId, { items: msg.payload.uris.map((u) => ({ path: u.split('/').pop(), isImage: /\.(png|svg|jpe?g|gif)$/.test(u), name: u.split('/').pop() })) });

@@ -21,6 +21,8 @@ export interface EditorConfig {
   tableAutoAlign: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
+  /** Treat `[[Note]]` as a link to another note. Off by default: it is not standard Markdown. */
+  wikiLinks: boolean;
 }
 
 /**
@@ -85,9 +87,11 @@ export type HostMessage =
   | { type: 'flush'; reqId: number }
   | { type: 'debugRequest'; reqId: number }
   | { type: 'selectionRequest'; reqId: number }
+  /** Notes were added or removed, so wiki links may resolve differently. */
+  | { type: 'notesChanged' }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
-export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris';
+export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'resolveNotes' | 'listNotes' | 'noteHeadings';
 
 export interface SaveImagePayload {
   name: string;
@@ -98,6 +102,21 @@ export interface ListFilesPayload {
 }
 export interface ResolveUrisPayload {
   uris: string[];
+}
+/** Asks which of these wiki link targets exist. Answered with `ResolveNotesResult`. */
+export interface ResolveNotesPayload {
+  names: string[];
+}
+export interface ResolveNotesResult {
+  notes: Record<string, 'found' | 'missing' | 'ambiguous'>;
+}
+/** Answer to `listNotes`: the notes a wiki link can point to. */
+export interface ListNotesResult {
+  notes: { name: string; path: string }[];
+}
+/** Asks for the headings of a note. Answered with `{ headings: string[] }`. */
+export interface NoteHeadingsPayload {
+  name: string;
 }
 export interface LinkedFile {
   /** Path relative to the document, already encoded for use inside a Markdown link. */
@@ -114,6 +133,7 @@ export type WebviewMessage =
   | { type: 'modeChanged'; mode: Mode }
   | { type: 'stats'; words: number; chars: number; selWords: number }
   | { type: 'openLink'; href: string }
+  | { type: 'openWikiLink'; target: string; heading: string }
   | { type: 'request'; reqId: number; kind: RequestKind; payload?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'selectionState'; reqId: number; text: string }
@@ -123,9 +143,11 @@ export type WebviewMessage =
       text: string;
       mode: Mode;
       epoch: number;
+      /** Zero-based line of the cursor. */
+      cursorLine: number;
       problems: string[];
-      /** How many diagrams and formulas are drawn on screen, and how many diagrams failed. */
-      rendered: { diagrams: number; diagramErrors: number; math: number };
+      /** How many diagrams, formulas and wiki links are drawn on screen, and how many of them failed or lead nowhere. */
+      rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number; wikiLinksMissing: number };
     };
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'bmp', 'ico'];

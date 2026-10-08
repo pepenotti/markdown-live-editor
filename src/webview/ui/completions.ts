@@ -4,7 +4,7 @@ import { syntaxTree } from '@codemirror/language';
 import type { EditorState, Extension } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import type { CommandId } from '../../shared/protocol';
+import type { CommandId, ListNotesResult } from '../../shared/protocol';
 import {
   type FormatCommand,
   insertCodeBlock,
@@ -112,9 +112,60 @@ function pathSource(host: HostBridge) {
   };
 }
 
-export function completions(host: HostBridge, run: (id: CommandId) => void): Extension {
+/** Completes a wiki link and leaves the cursor after its closing brackets. */
+function applyWikiName(view: EditorView, text: string, from: number, to: number): void {
+  const line = view.state.doc.lineAt(to);
+  const rest = line.text.slice(to - line.from);
+  let insert = text;
+  let cursor = from + text.length;
+  if (rest.startsWith(']]')) cursor += 2;
+  else if (!/^[^\[\]]*\]\]/.test(rest)) {
+    insert += ']]';
+    cursor += 2;
+  }
+  view.dispatch({ changes: { from, to, insert }, selection: { anchor: cursor }, scrollIntoView: true, userEvent: 'input.complete' });
+}
+
+/** After `[[`: the notes of the workspace, and after `[[Note#` the headings of that note. */
+function wikiSource(host: HostBridge, enabled: () => boolean) {
+  const cache = new Map<string, { at: number; items: Promise<{ label: string; detail?: string }[]> }>();
+  const cached = (key: string, load: () => Promise<{ label: string; detail?: string }[]>) => {
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < 5000) return hit.items;
+    const items = load().catch(() => []);
+    if (cache.size > 50) cache.clear();
+    cache.set(key, { at: Date.now(), items });
+    return items;
+  };
+  const notes = () =>
+    cached('', async () =>
+      (await host.request<ListNotesResult>('listNotes')).notes.map((n) => ({ label: n.name, detail: n.path === `${n.name}.md` ? undefined : n.path })),
+    );
+  const headings = (name: string) =>
+    cached('#' + name, async () => (await host.request<{ headings: string[] }>('noteHeadings', { name })).headings.map((h) => ({ label: h })));
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (!enabled()) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const m = /\[\[([^\[\]|#]*)(?:#([^\[\]|]*))?$/.exec(line.text.slice(0, ctx.pos - line.from));
+    if (!m || insideCode(ctx.state, ctx.pos)) return null;
+    const inHeading = m[2] !== undefined;
+    const items = await (inHeading ? headings(m[1].trim()) : notes());
+    if (ctx.aborted || !items.length) return null;
+    return {
+      from: ctx.pos - (inHeading ? m[2].length : m[1].length),
+      options: items.map((item) => ({
+        ...item,
+        type: inHeading ? 'text' : 'file',
+        apply: (view, _completion, from, to) => applyWikiName(view, item.label, from, to),
+      })),
+      validFor: inHeading ? /^[^\[\]|]*$/ : /^[^\[\]|#]*$/,
+    };
+  };
+}
+
+export function completions(host: HostBridge, run: (id: CommandId) => void, wikiLinks: () => boolean = () => false): Extension {
   return autocompletion({
-    override: [slashSource(run), pathSource(host)],
+    override: [slashSource(run), pathSource(host), wikiSource(host, wikiLinks)],
     icons: false,
     activateOnTyping: true,
     closeOnBlur: true,

@@ -49,6 +49,13 @@ suite('Seamless Markdown', () => {
     fs.cpSync(SAMPLE, dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'plain.md'), 'First line\n\nSecond paragraph with a word.\n');
     fs.writeFileSync(path.join(dir, 'split.md'), 'alpha\n\nbeta\n');
+    fs.mkdirSync(path.join(dir, 'wiki', 'sub'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'wiki', 'Home.md'),
+      '# Home\n\nSee [[Target]] and [[target#Second part|part two]].\n\nAlso [the target](Target.md#second-part) the standard way.\n\nNothing yet: [[Missing Note]].\n',
+    );
+    fs.writeFileSync(path.join(dir, 'wiki', 'Target.md'), '# Target\n\nText\n\n## Second part\n\nMore\n');
+    fs.writeFileSync(path.join(dir, 'wiki', 'sub', 'Deep.md'), '# Deep\n\nBack to [[Target]].\n\n`[[Target]]` in code does not count.\n');
   });
 
   suiteTeardown(async () => {
@@ -246,6 +253,104 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(outline.length, 1);
     assert.strictEqual(outline[0].text, 'Seamless Markdown');
     assert.ok(outline[0].children.some((c) => c.text === 'Tables'));
+  });
+
+  test('leaves double brackets alone while wiki links are turned off', async () => {
+    const { uri, document } = await open('wiki/Home.md');
+    const state = await inStep(uri, document);
+    assert.strictEqual(state.rendered.wikiLinks, 0);
+    assert.deepStrictEqual(state.problems, []);
+  });
+
+  suite('wiki links', () => {
+    const setting = (value) => vscode.workspace.getConfiguration('seamlessMarkdown').update('wikiLinks', value, vscode.ConfigurationTarget.Global);
+    const file = (...parts) => vscode.Uri.file(path.join(dir, 'wiki', ...parts));
+    const names = (links) => links.map((l) => path.basename(l.path));
+
+    suiteSetup(() => setting(true));
+    suiteTeardown(() => setting(undefined));
+
+    test('resolves note names and draws the links', async () => {
+      const { uri, document } = await open('wiki/Home.md');
+      // These files are outside any workspace folder: the folder of the document and its subfolders are indexed.
+      assert.deepStrictEqual(await api.resolveNotes(uri, ['Target', 'target.md', 'sub/Deep', 'deep', 'Missing Note']), {
+        Target: 'found',
+        'target.md': 'found',
+        'sub/Deep': 'found',
+        deep: 'found',
+        'Missing Note': 'missing',
+      });
+      const state = await until(async () => {
+        const s = await api.state(uri);
+        return s && s.rendered.wikiLinks === 3 && s.rendered.wikiLinksMissing === 1 ? s : null;
+      }, 'the wiki links to be drawn');
+      assert.deepStrictEqual(state.problems, []);
+      assert.strictEqual(document.isDirty, false);
+      const notes = await api.listNotes(uri);
+      assert.deepStrictEqual(notes.map((n) => n.name), ['Deep', 'Target']);
+      assert.deepStrictEqual(await api.noteHeadings(uri, 'Target'), ['Target', 'Second part']);
+    });
+
+    test('lists the notes that link to a note, by wiki link or Markdown link', async () => {
+      const target = file('Target.md');
+      await open('wiki/Target.md');
+      const links = await api.backlinks(target);
+      assert.deepStrictEqual(names(links), ['Home.md', 'Deep.md']);
+      assert.deepStrictEqual(links[0].lines.map((l) => l.line), [2, 4]);
+      assert.strictEqual(links[0].lines[1].text, 'Also [the target](Target.md#second-part) the standard way.');
+      assert.deepStrictEqual(links[1].lines, [{ line: 2, text: 'Back to [[Target]].' }]);
+      assert.deepStrictEqual(await api.backlinks(file('Home.md')), []);
+
+      // A new file is picked up by the watcher.
+      fs.writeFileSync(path.join(dir, 'wiki', 'Later.md'), 'Read [[Target|this]] first.\n');
+      await until(async () => names(await api.backlinks(target)).includes('Later.md'), 'the new file to show up');
+      fs.rmSync(path.join(dir, 'wiki', 'Later.md'));
+      await until(async () => !names(await api.backlinks(target)).includes('Later.md'), 'the deleted file to disappear');
+
+      // Unsaved text counts as well.
+      const deep = await open('wiki/sub/Deep.md');
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(deep.uri, new vscode.Position(0, 0), 'Up to [Target](../Target.md).\n');
+      assert.ok(await vscode.workspace.applyEdit(edit));
+      const lines = await until(async () => {
+        const found = (await api.backlinks(target)).find((l) => path.basename(l.path) === 'Deep.md');
+        return found && found.lines.length === 2 ? found.lines : null;
+      }, 'the unsaved link to show up');
+      assert.deepStrictEqual(lines.map((l) => l.line), [0, 3]);
+    });
+
+    test('opens a backlink at its line', async () => {
+      const home = file('Home.md');
+      await api.openBacklink(home, 4);
+      await until(() => api.sessionCount(home) === 1, 'the linking note to open');
+      await until(async () => (await api.state(home))?.cursorLine === 4, 'the cursor to reach the line');
+    });
+
+    test('follows a wiki link to a heading, and creates a missing note only when confirmed', async () => {
+      const { uri } = await open('wiki/Home.md');
+      const target = file('Target.md');
+      assert.strictEqual((await api.openWikiLink(uri, 'target', 'Second part', false)).toString(), target.toString());
+      await until(() => api.sessionCount(target) === 1, 'the linked note to open');
+      await until(async () => (await api.state(target))?.cursorLine === 4, 'the cursor to reach the heading');
+
+      const created = path.join(dir, 'wiki', 'Missing Note.md');
+      assert.strictEqual(await api.openWikiLink(uri, 'Missing Note', '', false), undefined);
+      assert.ok(!fs.existsSync(created), 'nothing is created without a yes');
+      const made = await api.openWikiLink(uri, 'Missing Note', '', true);
+      assert.strictEqual(made.fsPath, vscode.Uri.file(created).fsPath);
+      assert.strictEqual(fs.readFileSync(created, 'utf8'), '# Missing Note\n');
+      await until(() => api.sessionCount(made) === 1, 'the new note to open');
+      assert.deepStrictEqual(await api.resolveNotes(uri, ['Missing Note']), { 'Missing Note': 'found' });
+      // The link in the first note is no longer drawn as missing.
+      await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+      await until(async () => {
+        const s = await api.state(uri);
+        return s && s.rendered.wikiLinks === 3 && s.rendered.wikiLinksMissing === 0;
+      }, 'the link to be drawn as found');
+      // A name cannot leave the folder of the document.
+      const sneaky = await api.openWikiLink(uri, '../../Escape', '', true);
+      assert.strictEqual(sneaky.fsPath, vscode.Uri.file(path.join(dir, 'wiki', 'Escape.md')).fsPath);
+    });
   });
 
   test('is offered for Markdown files but does not take over as the default', async () => {

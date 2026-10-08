@@ -62,6 +62,7 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table.
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
+- **Wiki links and backlinks** (off by default, turn on `seamlessMarkdown.wikiLinks`): `[[Note]]`, `[[Note#Heading]]` and `[[Note|shown text]]` link to other Markdown files of the workspace, with completion after `[[`. `Cmd`/`Ctrl`+click opens the note, or offers to create it when it does not exist. A "Backlinks" panel in the Explorer lists the notes that link to the open one.
 - **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
 - **Copy as HTML**: copies the selection, or the whole document, as HTML.
 - **Find and replace**, **Go to Heading**, **folding** of the section under a heading (hover a heading and click the arrow in the margin), word count and reading time in the status bar.
@@ -105,6 +106,7 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
+| `seamlessMarkdown.wikiLinks` | `false` | Treat `[[Note]]` as a link to another Markdown file, and show the Backlinks panel |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations
