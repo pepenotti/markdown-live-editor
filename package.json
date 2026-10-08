@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -286,12 +286,12 @@
       },
       {
         "command": "seamlessMarkdown.exportHtml",
-        "title": "Export as HTML\u2026",
+        "title": "Export as HTML…",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.exportPdf",
-        "title": "Export as PDF\u2026",
+        "title": "Export as PDF…",
         "category": "Seamless Markdown"
       },
       {

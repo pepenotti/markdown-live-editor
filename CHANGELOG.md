@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Broken link checking: links to missing files, headings and reference definitions are underlined and listed in the Problems panel, with a quick fix for mistyped heading links. Nothing is fetched from the network. Turn it off with `seamlessMarkdown.checkLinks`.
+- Export as HTML: one self-contained file with embedded styles and images, math, footnotes and alerts.
+- Export as PDF: through an installed Chrome or Edge when there is one, otherwise through the browser's print dialog.
+- Wiki links and a Backlinks panel, behind `seamlessMarkdown.wikiLinks` (off by default): `[[Note]]`, `[[Note|text]]` and `[[Note#Heading]]`, with completion and a prompt to create a missing note.
+- Heading links for repeated headings now number the way GitHub does when a heading already ends in a number.
+
 ## 0.3.0
 
 - Footnotes: `[^1]` references render as numbers, and Cmd/Ctrl+click jumps to the definition.
