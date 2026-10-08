@@ -155,7 +155,37 @@ How it is put together:
    npm run release:tag
    ```
 
-The tag starts the Release workflow. It runs the tests again, builds the `.vsix`, creates a GitHub release with the `.vsix` attached and that version's changelog as notes, and publishes to the Marketplace if the repository has a `VSCE_PAT` secret. Without the secret it stops after the GitHub release, and `npx vsce publish --no-dependencies` publishes by hand.
+The tag starts the Release workflow. It runs the tests again, builds the `.vsix`, creates a GitHub release with the `.vsix` attached and that version's changelog as notes, and publishes to the Marketplace if the repository has a `VSCE_PAT` secret and to [Open VSX](https://open-vsx.org) if it has an `OVSX_PAT` secret. A registry without its secret is skipped with a notice, and `npx vsce publish --no-dependencies` or `npx ovsx publish <file>.vsix -p <token>` publishes by hand. The two registries are independent: if one publish fails, the other still runs and the workflow ends as failed.
+
+To publish a tag again, for example after adding a secret that was missing, run the workflow by hand with the tag:
+
+```bash
+gh workflow run release.yml -f tag=v0.2.0
+```
+
+Running it again is safe. An existing GitHub release gets the `.vsix` uploaded over its asset, and a registry that already has that version is skipped with a notice. A manual run uses the workflow file from `main` and the code from the tag.
+
+#### Open VSX, one time
+
+Open VSX is the registry used by Cursor, VSCodium, Windsurf and other editors built on VS Code. Before the first publish the repository owner has to do this once, following [Publishing Extensions](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions) in the Open VSX wiki:
+
+1. Create an Eclipse account at <https://accounts.eclipse.org/user/register> and fill in its **GitHub Username** field with the GitHub account you will use on open-vsx.org.
+2. Log in to <https://open-vsx.org> with that GitHub account.
+3. In [Settings, Profile](https://open-vsx.org/user-settings/profile), click **Log in with Eclipse**, then **Show Publisher Agreement**, read it and click **Agree**.
+4. In [Settings, Access Tokens](https://open-vsx.org/user-settings/tokens), generate a token and copy it. It is shown only once.
+5. Create the namespace, which is the `publisher` in `package.json`. A publish fails until the namespace exists:
+
+   ```bash
+   npx ovsx create-namespace pepenotti -p <token>
+   ```
+
+6. Store the token as a repository secret. The command asks for the value, so it stays out of the shell history:
+
+   ```bash
+   gh secret set OVSX_PAT --repo pepenotti/markdown-live-editor
+   ```
+
+Creating the namespace does not make you its verified owner. To have the extension shown as verified, claim the namespace as described in [Namespace Access](https://github.com/eclipse-openvsx/openvsx/wiki/Namespace-Access).
 
 ### Checks that still need a person
 
