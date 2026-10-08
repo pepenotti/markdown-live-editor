@@ -102,23 +102,17 @@ The shipped bundles in `dist/` include the packages below. Each is distributed u
 | delaunator | 5.1.0 | ISC | https://github.com/mapbox/delaunator |
 | dompurify | 3.4.16 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify |
 | elkjs | 0.9.3 | EPL-2.0 | https://github.com/kieler/elkjs |
-| entities | 8.1.0 | BSD-2-Clause | https://github.com/fb55/entities |
 | es-toolkit | 1.52.0 | MIT | https://github.com/toss/es-toolkit |
 | internmap | 2.0.3 | ISC | https://github.com/mbostock/internmap |
 | katex | 0.19.0 | MIT | https://github.com/KaTeX/KaTeX |
 | khroma | 2.1.0 | see package | github:fabiospampinato/khroma |
 | layout-base | 1.0.2 | MIT | https://github.com/iVis-at-Bilkent/layout-base |
-| linkify-it | 6.1.0 | MIT | https://github.com/markdown-it/linkify-it |
 | lodash-es | 4.18.1 | MIT | lodash/lodash |
-| markdown-it | 15.0.2 | MIT | markdown-it/markdown-it |
-| mdurl | 2.1.0 | MIT | https://github.com/markdown-it/mdurl |
 | mermaid | 12.1.0 | MIT | https://github.com/mermaid-js/mermaid |
-| punycode.js | 2.3.1 | MIT | https://github.com/mathiasbynens/punycode.js |
 | robust-predicates | 3.0.3 | Unlicense | https://github.com/mourner/robust-predicates |
 | roughjs | 4.6.6 | MIT | https://github.com/pshihn/rough |
 | style-mod | 4.1.4 | MIT | https://code.haverbeke.berlin/marijn/style-mod |
 | stylis | 4.4.0 | MIT | https://github.com/thysultan/stylis.js |
 | ts-dedent | 2.3.0 | MIT | https://github.com/tamino-martinius/node-ts-dedent |
-| uc.micro | 3.0.0 | MIT | markdown-it/uc.micro |
 | uuid | 14.0.2 | MIT | https://github.com/uuidjs/uuid |
 | w3c-keyname | 2.2.8 | MIT | https://github.com/marijnh/w3c-keyname |
