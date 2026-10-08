@@ -230,6 +230,8 @@ class TableController {
   private pendingFocus: CellRef | null = null;
   private body!: HTMLTableElement;
   private tools!: HTMLElement;
+  /** Whether text was selected in the focused cell when a mouse button last went down, and when that was. */
+  private pressed: { at: number; selection: boolean } | null = null;
   private readonly resize: ResizeObserver | null;
 
   constructor(
@@ -543,13 +545,15 @@ class TableController {
     const hit = e.target instanceof HTMLElement ? e.target : null;
     const cell = this.cellOf(hit) ?? (hit?.closest('td,th')?.firstElementChild as HTMLElement | null | undefined) ?? null;
     if (!cell || !this.body.contains(cell)) return;
-    // With text selected in the cell, leave the usual menu (cut, copy, paste) alone.
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed && sel.anchorNode && cell.contains(sel.anchorNode) && document.activeElement === cell) return;
+    // With text selected in the cell, leave the usual menu (cut, copy, paste) alone. What counts is
+    // the selection before the click: on a Mac the right-click itself selects the word under it.
+    const press = this.pressed && e.timeStamp - this.pressed.at < 1000 ? this.pressed : null;
+    if (press ? press.selection : this.hasSelection(cell)) return;
     e.preventDefault();
     e.stopPropagation();
     const at = this.ref(cell);
     if (document.activeElement !== cell) this.focusCell(at.r, at.c, 'end');
+    else if (this.hasSelection(cell)) window.getSelection()?.collapseToEnd();
     // The keyboard's menu key reports no useful point: open under the cell instead.
     const box = cell.getBoundingClientRect();
     const inside = e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
@@ -640,8 +644,14 @@ class TableController {
 
   /* ---------- events ---------- */
 
+  private hasSelection(cell: HTMLElement): boolean {
+    const sel = window.getSelection();
+    return !!sel && !sel.isCollapsed && !!sel.anchorNode && cell.contains(sel.anchorNode) && document.activeElement === cell;
+  }
+
   private onPointerDown(e: PointerEvent): void {
     const cell = this.cellOf(e.target);
+    this.pressed = { at: e.timeStamp, selection: !!cell && this.hasSelection(cell) };
     if (cell) {
       // Switch to the Markdown text before the browser places the caret.
       this.edit(cell);

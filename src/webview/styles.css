@@ -675,7 +675,13 @@ body {
 #app .cm-md-cell:focus {
   box-shadow: inset 0 0 0 2px var(--mdl-accent);
 }
+/* What cannot wrap, such as a long formula, scrolls inside its cell instead of covering the next one. */
+#app .cm-md-cell:not(.cm-md-cell-editing) {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 #app .cm-md-cell-image {
+  max-width: 100%;
   max-height: 3em;
   vertical-align: middle;
 }
