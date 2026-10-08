@@ -38,10 +38,12 @@ export function makeResolver(baseUri: string, rootUri: string | null): (src: str
 /** Things the editor asks the host to do. */
 export interface HostActions {
   openLink(href: string): void;
+  /** Opens the note a wiki link names, or offers to create it. */
+  openWikiLink(target: string, heading: string): void;
   /** Lets the user choose image files and returns paths relative to the document. */
   pickImages(): Promise<{ path: string; isImage: boolean; name: string }[]>;
 }
 
 export const hostActions = Facet.define<HostActions, HostActions>({
-  combine: (values) => values[0] ?? { openLink: () => {}, pickImages: async () => [] },
+  combine: (values) => values[0] ?? { openLink: () => {}, openWikiLink: () => {}, pickImages: async () => [] },
 });

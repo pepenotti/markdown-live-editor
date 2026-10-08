@@ -6,6 +6,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { imageTarget, looksLikeImage, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES } from '../shared/embed';
+import type { WikiHref } from '../shared/wikiLinkPlugin';
+import { scanNote, stripNoteExtension } from '../shared/wikiLinks';
+import { relativePath } from './images';
+import { type NoteIndex, wikiLinksEnabled } from './notes';
 import { installedBrowser, printToPdf } from './pdf';
 import { renderer } from './renderer';
 
@@ -92,7 +96,32 @@ async function embedImages(document: vscode.TextDocument, text: string): Promise
   return { images, missing: missing.sort() };
 }
 
-async function build(document: vscode.TextDocument, options: { print: boolean; embed: boolean }): Promise<Built> {
+/**
+ * How wiki links are exported, or undefined while they are turned off (double brackets
+ * are then left as the text they are).
+ *
+ * A link to a note becomes a relative link to that note's own export: the same path with
+ * `.html` for the extension, as **Export as HTML** names a file by default. A note that
+ * does not exist, or whose name fits several, is exported as its text. So is every note
+ * when `linked` is false: a PDF or a copied fragment has no folder to be relative to.
+ */
+export async function wikiHrefs(document: vscode.TextDocument, text: string, notes: NoteIndex | undefined, linked: boolean): Promise<WikiHref | undefined> {
+  if (!notes || !wikiLinksEnabled(document.uri)) return undefined;
+  const hrefs = new Map<string, string>();
+  if (linked) {
+    const folder = vscode.Uri.joinPath(document.uri, '..').path;
+    for (const link of scanNote(text).links) {
+      if (link.kind !== 'wiki' || hrefs.has(link.target)) continue;
+      const found = await notes.resolve(document.uri, link.target);
+      if (found.status !== 'found') continue;
+      const path = stripNoteExtension(relativePath(folder, found.uri.path)) + '.html';
+      hrefs.set(link.target, path.split('/').map(encodeURIComponent).join('/'));
+    }
+  }
+  return (target) => hrefs.get(target) ?? null;
+}
+
+async function build(document: vscode.TextDocument, options: { print: boolean; embed: boolean; notes?: NoteIndex }): Promise<Built> {
   const text = document.getText();
   const { images, missing } = options.embed ? await embedImages(document, text) : { images: new Map<string, string>(), missing: [] };
   const { html, hasMermaid } = renderer().renderDocument(text, {
@@ -100,6 +129,7 @@ async function build(document: vscode.TextDocument, options: { print: boolean; e
     mermaid: settings(document).get<boolean>('mermaidFromCdn', false),
     fallbackTitle: stemOf(document),
     print: options.print,
+    wikiLinks: await wikiHrefs(document, text, options.notes, !options.print),
   });
   return { html, missing, hasMermaid };
 }
@@ -113,7 +143,7 @@ function missingNote(missing: readonly string[]): string {
 const nameOf = (uri: vscode.Uri) => uri.path.slice(uri.path.lastIndexOf('/') + 1);
 
 /** Writes the document as one self-contained HTML file. Without a target the user is asked for one. */
-export async function exportHtml(document: vscode.TextDocument, target?: vscode.Uri): Promise<vscode.Uri | undefined> {
+export async function exportHtml(document: vscode.TextDocument, target?: vscode.Uri, notes?: NoteIndex): Promise<vscode.Uri | undefined> {
   const asked = target === undefined;
   target ??= await vscode.window.showSaveDialog({
     defaultUri: defaultTarget(document, 'html'),
@@ -122,7 +152,7 @@ export async function exportHtml(document: vscode.TextDocument, target?: vscode.
     saveLabel: 'Export',
   });
   if (!target) return undefined;
-  const { html, missing } = await build(document, { print: false, embed: settings(document).get<boolean>('embedImages', true) });
+  const { html, missing } = await build(document, { print: false, embed: settings(document).get<boolean>('embedImages', true), notes });
   await vscode.workspace.fs.writeFile(target, Buffer.from(html, 'utf8'));
   if (asked) {
     const saved = target;
@@ -218,6 +248,8 @@ export interface PdfOptions {
   browser?: string | null;
   /** Opens a file in the user's browser. */
   open?: Opener;
+  /** The notes of the workspace, so wiki links are exported as their text while they are turned on. */
+  notes?: NoteIndex;
 }
 
 /**
@@ -229,7 +261,7 @@ export async function exportPdf(document: vscode.TextDocument, options: PdfOptio
   const open = options.open ?? ((uri: vscode.Uri) => vscode.env.openExternal(uri));
   sweepStaleTempFolders();
   // The temporary file is not next to the document, so images are always embedded.
-  const { html, missing, hasMermaid } = await build(document, { print: true, embed: true });
+  const { html, missing, hasMermaid } = await build(document, { print: true, embed: true, notes: options.notes });
   // A folder of its own that only this user can read: the file holds the whole document.
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), TEMP_PREFIX));
   tempFolders.add(folder);

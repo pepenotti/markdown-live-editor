@@ -8,8 +8,10 @@ import {
   type EditorConfig,
   type HostMessage,
   type ListFilesPayload,
+  type ListNotesResult,
   type Mode,
   MODES,
+  type NoteHeadingsPayload,
   type ResolveUrisPayload,
   type SaveImagePayload,
   type TextChange,
@@ -20,6 +22,8 @@ import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
 import { readTocOptions } from './toc';
 import { LinkChecker } from './linkCheck';
+import { FileWatch } from './fileWatch';
+import { NoteIndex, wikiLinksEnabled } from './notes';
 
 export interface Stats {
   words: number;
@@ -44,7 +48,18 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     toc: readTocOptions(resource),
     spellCheck: c.get<boolean>('spellCheck', false),
     checkLinks: c.get<boolean>('checkLinks', true),
+    wikiLinks: c.get<boolean>('wikiLinks', false),
   };
+}
+
+async function confirmNewNote(name: string, location: vscode.Uri): Promise<boolean> {
+  const create = 'Create Note';
+  const choice = await vscode.window.showInformationMessage(
+    `There is no note called "${name}". Create it?`,
+    { modal: true, detail: `It will be saved as ${vscode.workspace.asRelativePath(location, false)}.` },
+    create,
+  );
+  return choice === create;
 }
 
 export class Session implements SyncTarget {
@@ -58,6 +73,7 @@ export class Session implements SyncTarget {
   private readonly readyWaiters: (() => void)[] = [];
   private nextId = 1;
   private pendingAnchor: string | undefined;
+  private pendingLine: number | undefined;
 
   constructor(
     private readonly provider: MarkdownEditorProvider,
@@ -144,6 +160,8 @@ export class Session implements SyncTarget {
         for (const done of this.readyWaiters.splice(0)) done();
         if (this.pendingAnchor) this.send('revealAnchor', this.pendingAnchor);
         this.pendingAnchor = undefined;
+        if (this.pendingLine !== undefined) this.send('revealLine', this.pendingLine);
+        this.pendingLine = undefined;
         break;
       }
       case 'edit':
@@ -170,6 +188,9 @@ export class Session implements SyncTarget {
         break;
       case 'openLink':
         void this.provider.openLink(this, message.href);
+        break;
+      case 'openWikiLink':
+        void this.provider.openWikiLink(this, String(message.target ?? ''), String(message.heading ?? ''));
         break;
       case 'request':
         void this.onRequest(message.reqId, message.kind, message.payload);
@@ -202,10 +223,16 @@ export class Session implements SyncTarget {
         }
         case 'checkLinks': {
           const targets = (payload as CheckLinksPayload)?.targets;
-          const wanted = Array.isArray(targets) ? targets.map((t) => ({ path: String(t?.path ?? ''), anchor: String(t?.anchor ?? '') })) : [];
+          const wanted = Array.isArray(targets) ? targets.map((t) => ({ path: String(t?.path ?? ''), anchor: String(t?.anchor ?? ''), wiki: t?.wiki === true })) : [];
           data = { issues: await this.provider.links.check(this.document.uri, wanted) } satisfies CheckLinksResult;
           break;
         }
+        case 'listNotes':
+          data = { notes: await this.provider.notes.list(this.document.uri) } satisfies ListNotesResult;
+          break;
+        case 'noteHeadings':
+          data = { headings: await this.provider.notes.headings(this.document.uri, String((payload as NoteHeadingsPayload)?.name ?? '')) };
+          break;
         default:
           throw new Error(`Unknown request: ${kind}`);
       }
@@ -256,6 +283,11 @@ export class Session implements SyncTarget {
   revealAnchor(anchor: string): void {
     if (this.ready) this.send('revealAnchor', anchor);
     else this.pendingAnchor = anchor;
+  }
+
+  revealLine(line: number): void {
+    if (this.ready) this.send('revealLine', line);
+    else this.pendingLine = line;
   }
 
   /* ---------- set-up ---------- */
@@ -317,11 +349,20 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   /** Looks at the file system for broken links and publishes them as diagnostics. */
   readonly links: LinkChecker;
 
+  /** The file watchers the link checker and the index of notes share. */
+  readonly watch = new FileWatch();
+  /** The Markdown files that wiki links can point to. Does nothing while wiki links are off. */
+  readonly notes = new NoteIndex(this.watch);
+
   constructor(readonly context: vscode.ExtensionContext) {
-    this.links = new LinkChecker(() => {
-      for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
-    });
-    context.subscriptions.push(this.changed, this.channel, this.links);
+    this.links = new LinkChecker(
+      () => {
+        for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
+      },
+      this.watch,
+      this.notes,
+    );
+    context.subscriptions.push(this.changed, this.channel, this.links, this.notes, this.watch);
   }
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
@@ -416,6 +457,61 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     } else {
       await vscode.commands.executeCommand('vscode.open', target);
     }
+  }
+
+  /**
+   * Opens the note a wiki link names and jumps to the heading, if one is given.
+   *
+   * The name is text from a document, so it is never used as a path to open: it is looked
+   * up among the notes of the folders the document belongs to, and only such a note is
+   * opened. A note that does not exist can be created, as a plain file directly in the
+   * folder of the linking document, and only after `confirm` has agreed.
+   */
+  async openWikiLink(
+    session: Session,
+    target: string,
+    heading: string,
+    confirm: (name: string, location: vscode.Uri) => Thenable<boolean> = confirmNewNote,
+  ): Promise<vscode.Uri | undefined> {
+    const from = session.document.uri;
+    if (!wikiLinksEnabled(from)) return undefined;
+    const name = target.trim();
+    let uri: vscode.Uri | undefined = name ? undefined : from;
+    if (!uri) {
+      const found = await this.notes.resolve(from, name);
+      if (found.status === 'found') {
+        uri = found.uri;
+      } else if (found.status === 'ambiguous') {
+        const items = found.uris.map((u) => ({ label: vscode.workspace.asRelativePath(u, false), uri: u }));
+        uri = (await vscode.window.showQuickPick(items, { placeHolder: `Several notes are called "${name}"` }))?.uri;
+      } else {
+        const location = this.notes.locationFor(from, name);
+        if (!location) {
+          void vscode.window.showWarningMessage(
+            /[\\/]/.test(name)
+              ? `There is no note "${name}". A note in another folder is not created from a link; create the file first.`
+              : `There is no note "${name}", and that name cannot be used for a file.`,
+          );
+          return undefined;
+        }
+        if (!(await confirm(name, location))) return undefined;
+        if (!(await this.notes.create(location))) {
+          void vscode.window.showWarningMessage(`The note "${name}" could not be created.`);
+          return undefined;
+        }
+        uri = location;
+      }
+    }
+    if (!uri) return undefined;
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+    if (heading) for (const s of this.sessionsFor(uri)) s.revealAnchor(encodeURIComponent(heading));
+    return uri;
+  }
+
+  /** Opens a note in this editor with the cursor on a line. */
+  async openAtLine(uri: vscode.Uri, line: number): Promise<void> {
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+    for (const s of this.sessionsFor(uri)) s.revealLine(line);
   }
 
   /* ---------- default editor ---------- */

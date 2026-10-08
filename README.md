@@ -65,6 +65,7 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
 - **Broken links**: a link or image whose file does not exist, a link to a heading that does not exist (in this or another Markdown file) and a reference link without a definition get a wavy underline with the reason, and are listed in the Problems panel. A mistyped heading has a quick fix. Only local files are looked at; web links are never requested.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
+- **Wiki links and backlinks** (off by default, turn on `seamlessMarkdown.wikiLinks`): `[[Note]]`, `[[Note#Heading]]` and `[[Note|shown text]]` link to other Markdown files of the workspace, with completion after `[[`. `Cmd`/`Ctrl`+click opens the note, or offers to create it next to the document when it does not exist. The link check reports a note or heading that does not exist and a name that fits several notes. Export as HTML turns a wiki link into a link to that note's `.html`. A "Backlinks" panel in the Explorer lists the notes that link to the open one.
 - **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
 - **Copy as HTML**: copies the selection, or the whole document, as HTML.
 - **Export**: **Export as HTML…** writes one self-contained file, with images embedded and math as MathML. **Export as PDF…** opens a print version in your browser for Print → Save as PDF, or creates the PDF directly when Chrome, Edge or Chromium is installed. Nothing is downloaded.
@@ -119,6 +120,7 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.toc.updateOnSave` | `true` | Update the table of contents when a file that has the markers is saved |
 | `seamlessMarkdown.toc.levels` | `1..6` | Heading levels the table of contents lists, such as `2..4` |
 | `seamlessMarkdown.toc.ordered` | `false` | Numbered list instead of bullets |
+| `seamlessMarkdown.wikiLinks` | `false` | Treat `[[Note]]` as a link to another Markdown file, and show the Backlinks panel |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations

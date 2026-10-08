@@ -298,6 +298,11 @@
         "command": "seamlessMarkdown.revealLine",
         "title": "Go to Line",
         "category": "Seamless Markdown"
+      },
+      {
+        "command": "seamlessMarkdown.openBacklink",
+        "title": "Open Backlink",
+        "category": "Seamless Markdown"
       }
     ],
     "keybindings": [
@@ -554,6 +559,10 @@
         {
           "command": "seamlessMarkdown.revealLine",
           "when": "false"
+        },
+        {
+          "command": "seamlessMarkdown.openBacklink",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -690,6 +699,11 @@
           "type": "boolean",
           "default": false,
           "description": "Ask the editor's built-in spell checker to check the text and table cells. Whether misspelled words are underlined depends on VS Code and the operating system."
+        },
+        "seamlessMarkdown.wikiLinks": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Treat `[[Note]]` as a link to another Markdown file of the workspace, check that the note exists, and show a Backlinks view in the Explorer. Wiki links are not standard Markdown, so other tools show them as plain text."
         }
       }
     },
@@ -700,6 +714,13 @@
           "name": "Markdown Outline",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'",
           "icon": "$(list-tree)",
+          "contextualTitle": "Seamless Markdown"
+        },
+        {
+          "id": "seamlessMarkdown.backlinks",
+          "name": "Backlinks",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && config.seamlessMarkdown.wikiLinks",
+          "icon": "$(references)",
           "contextualTitle": "Seamless Markdown"
         }
       ]

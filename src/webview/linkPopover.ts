@@ -1,5 +1,6 @@
 // Full preview hides the syntax of links, images and inline math, so a small popover
 // next to the cursor shows what is hidden and lets it be edited.
+import { completionStatus } from '@codemirror/autocomplete';
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, StateField } from '@codemirror/state';
 import { type EditorView, showTooltip, type Tooltip, type TooltipView } from '@codemirror/view';
@@ -10,6 +11,9 @@ import { getAttr, isLoneImg, setAttr } from './htmlTag';
 import { linkInfo, type LinkInfo } from './links';
 import { texOf, withTex } from './markdown';
 import { modeField } from './modes';
+import { formatWikiLink, parseWikiLink } from '../shared/wikiLinks';
+import { findingReason } from './linkCheck';
+import { wikiLinkAt, type WikiLinkInfo } from './wikiLinks';
 
 export type Target =
   | { kind: 'link' | 'image'; from: number; to: number; node: SyntaxNode; info: LinkInfo }
@@ -41,6 +45,9 @@ function compute(state: EditorState): Tooltip | null {
   if (state.field(modeField) !== 'full') return null;
   const sel = state.selection.main;
   if (!sel.empty || state.selection.ranges.length > 1) return null;
+  const wiki = wikiTargetAt(state, sel.head);
+  // While note names are being offered, the list takes the place of the popover.
+  if (wiki) return completionStatus(state) === null ? { pos: wiki.from, end: wiki.to, above: false, arrow: false, create: createWikiPopover } : null;
   const target = popoverTargetAt(state, sel.head);
   if (!target) return null;
   return { pos: target.from, end: target.to, above: false, arrow: false, create: createPopover };
@@ -53,10 +60,11 @@ export const popoverField = StateField.define<Tooltip | null>({
       !tr.docChanged &&
       !tr.selection &&
       tr.startState.field(modeField) === tr.state.field(modeField) &&
+      completionStatus(tr.startState) === completionStatus(tr.state) &&
       syntaxTree(tr.startState) === syntaxTree(tr.state);
     if (unchanged) return value;
     const next = compute(tr.state);
-    return value && next && value.pos === next.pos && value.end === next.end ? value : next;
+    return value && next && value.pos === next.pos && value.end === next.end && value.create === next.create ? value : next;
   },
   provide: (field) => showTooltip.from(field),
 });
@@ -235,6 +243,78 @@ function createPopover(view: EditorView): TooltipView {
     const text = t.kind === 'tag' ? getAttr(t.tag, 'alt') : view.state.doc.sliceString(t.info.textFrom, t.info.textTo);
     if (active !== url.input) url.input.value = href;
     if (active !== alt.input) alt.input.value = text;
+  };
+  render();
+  return { dom, update: render };
+}
+
+/* ---------- wiki links ---------- */
+
+/** The wiki link whose visible text contains `pos`. */
+function wikiTargetAt(state: EditorState, pos: number): WikiLinkInfo | null {
+  const info = wikiLinkAt(state, pos);
+  return info && pos >= info.shownFrom && pos <= info.shownTo ? info : null;
+}
+
+function createWikiPopover(view: EditorView): TooltipView {
+  const here = () => wikiTargetAt(view.state, view.state.selection.main.head);
+  const dom = document.createElement('div');
+  dom.className = 'cm-md-popover';
+  dom.dataset.kind = 'wiki';
+  const note = field('Note', 'url', 'Note name, or Note#Heading');
+  const text = field('Text', 'text', 'Shown instead of the note name');
+  const actions = document.createElement('div');
+  actions.className = 'cm-md-popover-actions';
+  const open = button('Open', 'Open the note', () => {
+    const t = here();
+    if (t) view.state.facet(hostActions).openWikiLink(t.target, t.heading);
+  });
+  const del = button('Remove link', 'Keep the text and remove the link', () => {
+    const t = here();
+    if (!t) return;
+    const insert = view.state.doc.sliceString(t.shownFrom, t.shownTo);
+    view.dispatch({ changes: { from: t.from, to: t.to, insert }, selection: { anchor: t.from + insert.length }, userEvent: 'input.format' });
+    view.focus();
+  });
+  actions.append(open, del);
+  dom.append(note.row, text.row, actions);
+
+  // The link is rewritten when a field is left, not on every key: a half-typed name
+  // such as an empty one would stop being a link and close the popover.
+  let cancelled = false;
+  const commit = () => {
+    const t = here();
+    if (cancelled || !t) return;
+    const { target, heading } = parseWikiLink(note.input.value.replace(/\|/g, ' '));
+    if (!target && !heading) return;
+    const insert = formatWikiLink({ target, heading, alias: text.input.value });
+    if (insert === view.state.doc.sliceString(t.from, t.to)) return;
+    view.dispatch({ changes: { from: t.from, to: t.to, insert }, selection: { anchor: t.from + insert.length - 2 }, userEvent: 'input.type' });
+  };
+  for (const input of [note.input, text.input]) {
+    input.addEventListener('change', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        cancelled = e.key === 'Escape';
+        if (!cancelled) commit();
+        view.focus();
+        cancelled = false;
+        render();
+      }
+      e.stopPropagation();
+    });
+  }
+
+  const render = () => {
+    const t = here();
+    if (!t) return;
+    // Known from the link checker. With link checking off the button says Open and the host still asks before creating.
+    const missing = findingReason(view.state, t.from, t.to) === 'note';
+    open.textContent = missing ? 'Create note' : 'Open';
+    open.title = missing ? 'Create this note and open it' : 'Open the note';
+    if (document.activeElement !== note.input) note.input.value = t.target + (t.heading ? '#' + t.heading : '');
+    if (document.activeElement !== text.input) text.input.value = t.alias;
   };
   render();
   return { dom, update: render };

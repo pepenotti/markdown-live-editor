@@ -2,15 +2,20 @@
 // finding the links and headings of a document, resolving what can be resolved inside
 // the document, and wording the findings. Used by the webview and the extension host.
 import { IterMode, type SyntaxNode, type Tree } from '@lezer/common';
-import { markdownParser } from './markdownSyntax';
+import { markdownParser, wikiMarkdownParser } from './markdownSyntax';
 import { extractHeadings, headingSlugs, slugify } from './textUtil';
+import { parseWikiLink } from './wikiLinks';
 
 export interface LinkOccurrence {
   /** What gets underlined: the whole link or image, or the URL of a definition. */
   from: number;
   to: number;
-  kind: 'link' | 'image' | 'definition';
-  /** Target as written, or null for a reference link whose label has no definition. */
+  /** wiki: a `[[Note#Heading]]` link, which only exists while wiki links are turned on. */
+  kind: 'link' | 'image' | 'definition' | 'wiki';
+  /**
+   * Target as written, or null for a reference link whose label has no definition.
+   * For a wiki link: what stands before the `|`, a note name and perhaps a heading.
+   */
   href: string | null;
   /** Where `href` is written. -1 when there is none. */
   hrefFrom: number;
@@ -44,12 +49,15 @@ export type Anchors = Pick<DocumentScan, 'headings' | 'htmlIds' | 'lineSlugs'>;
 
 /** A link target that points at a file, split and decoded. */
 export interface Target {
-  /** Empty for a link to a heading of the same document. */
+  /** Empty for a link to a heading of the same document. For a wiki link, the note name. */
   path: string;
   anchor: string;
+  /** Set for the target of a wiki link: `path` is a note name to look up, not a file path. */
+  wiki?: boolean;
 }
 
-export type LinkIssue = { reason: 'file' } | { reason: 'anchor'; suggestion?: string };
+/** note: no note has that name. ambiguous: several have, and nothing settles which is meant. */
+export type LinkIssue = { reason: 'file' } | { reason: 'anchor'; suggestion?: string } | { reason: 'note' } | { reason: 'ambiguous' };
 
 export interface Fix {
   from: number;
@@ -62,7 +70,7 @@ export interface Finding {
   from: number;
   to: number;
   message: string;
-  reason: 'file' | 'anchor' | 'definition';
+  reason: 'file' | 'anchor' | 'definition' | 'note' | 'ambiguous';
   fix?: Fix;
 }
 
@@ -77,8 +85,9 @@ export interface Analysis {
 
 export const MARKDOWN_FILE = /\.(md|markdown|mdown|mkd)$/i;
 
-export function parseMarkdown(text: string): Tree {
-  return markdownParser.parse(text);
+/** @param wikiLinks parse `[[Note]]` as a wiki link, as the editor does while that setting is on. */
+export function parseMarkdown(text: string, wikiLinks = false): Tree {
+  return (wikiLinks ? wikiMarkdownParser() : markdownParser).parse(text);
 }
 
 function normalizeLabel(label: string): string {
@@ -170,6 +179,14 @@ export function scanDocument(tree: Tree, text: string): DocumentScan {
           return false;
         }
 
+        // Only in the tree while wiki links are turned on.
+        case 'WikiLink': {
+          const inner = slice(ref.from + 2, ref.to - 2);
+          const bar = inner.indexOf('|');
+          links.push({ from: ref.from, to: ref.to, kind: 'wiki', href: bar < 0 ? inner : inner.slice(0, bar), hrefFrom: ref.from + 2 });
+          return false;
+        }
+
         case 'LinkReference': {
           const label = ref.node.getChild('LinkLabel');
           const url = ref.node.getChild('URL');
@@ -223,8 +240,8 @@ export function scanDocument(tree: Tree, text: string): DocumentScan {
 }
 
 /** `scanDocument` for text that has no syntax tree yet. Expects LF line breaks. */
-export function scanText(text: string): DocumentScan {
-  return scanDocument(parseMarkdown(text), text);
+export function scanText(text: string, wikiLinks = false): DocumentScan {
+  return scanDocument(parseMarkdown(text, wikiLinks), text);
 }
 
 /** Every anchor a link can point at in the scanned document. */
@@ -295,6 +312,8 @@ function anchorFix(link: LinkOccurrence, suggestion: string | undefined): Fix | 
 
 export function issueMessage(target: Target, issue: LinkIssue): string {
   if (issue.reason === 'file') return `File not found: ${target.path}`;
+  if (issue.reason === 'note') return `No note called "${target.path}"`;
+  if (issue.reason === 'ambiguous') return `Several notes are called "${target.path}"`;
   return `No heading "${target.anchor}" in ${target.path || 'this document'}`;
 }
 
@@ -311,7 +330,15 @@ export function analyse(scan: DocumentScan): Analysis {
       local.push({ from: link.from, to: link.to, message: `No definition for [${link.label ?? ''}]`, reason: 'definition' });
       continue;
     }
-    const target = splitTarget(link.href);
+    let target: Target | null;
+    if (link.kind === 'wiki') {
+      const parts = parseWikiLink(link.href);
+      target = { path: parts.target, anchor: parts.heading, wiki: true };
+      // "[[#Heading]]" is checked below like "[x](#heading)"; "[[Note]]" is looked up by the host.
+      if (target.path === '' && target.anchor === '') continue;
+    } else {
+      target = splitTarget(link.href);
+    }
     if (!target) continue;
     if (target.path === '') {
       anchors ??= anchorSet(scan);
@@ -321,7 +348,7 @@ export function analyse(scan: DocumentScan): Analysis {
       local.push({ from: link.from, to: link.to, message: issueMessage(target, issue), reason: 'anchor', fix: anchorFix(link, issue.suggestion) });
       continue;
     }
-    const key = `${target.path}\n${target.anchor}`;
+    const key = `${target.wiki ? 'wiki' : ''}\n${target.path}\n${target.anchor}`;
     let at = index.get(key);
     if (at === undefined) {
       at = targets.length;

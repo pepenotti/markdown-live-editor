@@ -12,6 +12,7 @@ import type { SyntaxNode } from '@lezer/common';
 import { blockField, type Protected } from './decorations/blocks';
 import { afterLeadingAtoms, lineAtoms, linkInfo } from './decorations/inline';
 import { bypassGuard, externalChange, modeField } from './modes';
+import { wikiLinkInfo } from './wikiLinks';
 
 interface Change {
   from: number;
@@ -109,6 +110,10 @@ function contentRange(state: EditorState, node: SyntaxNode): { from: number; to:
     case 'Link': {
       const info = linkInfo(state, node);
       return info && info.href !== null ? { from: info.textFrom, to: info.textTo } : null;
+    }
+    case 'WikiLink': {
+      const info = wikiLinkInfo(state.doc, node.from, node.to);
+      return { from: info.shownFrom, to: info.shownTo };
     }
     default:
       return null;

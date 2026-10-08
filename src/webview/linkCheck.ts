@@ -14,6 +14,7 @@ const PARSE_BUDGET_MS = 60;
 const PARSE_RETRY_MS = 400;
 const MAX_PARSE_RETRIES = 40;
 const BROKEN = 'cm-md-broken-link';
+const MISSING_NOTE = 'cm-md-missing-note';
 
 interface FindingSet {
   decorations: DecorationSet;
@@ -33,7 +34,15 @@ const findingField = StateField.define<FindingSet>({
       if (!e.is(setFindings)) continue;
       const marks = e.value.findings
         .filter((f) => f.to > f.from && f.to <= tr.newDoc.length)
-        .map((f) => Decoration.mark({ class: BROKEN, attributes: { title: f.message }, message: f.message }).range(f.from, f.to));
+        .map((f) =>
+          Decoration.mark({
+            // A note that does not exist yet is an invitation to write it, so it is drawn more quietly.
+            class: f.reason === 'note' ? `${BROKEN} ${MISSING_NOTE}` : BROKEN,
+            attributes: { title: f.message },
+            message: f.message,
+            reason: f.reason,
+          }).range(f.from, f.to),
+        );
       value = marks.length || e.value.byHref.size ? { decorations: Decoration.set(marks, true), byHref: e.value.byHref } : NONE;
     }
     return value;
@@ -49,6 +58,15 @@ export function brokenLinkMessages(state: EditorState): string[] {
   if (!set) return out;
   for (let cursor = set.iter(); cursor.value; cursor.next()) out.push(String(cursor.value.spec.message));
   return out;
+}
+
+/** Why the link that spans exactly `from`..`to` is underlined, if it is. */
+export function findingReason(state: EditorState, from: number, to: number): Finding['reason'] | undefined {
+  let reason: Finding['reason'] | undefined;
+  state.field(findingField, false)?.decorations.between(from, to, (f, t, value) => {
+    if (f === from && t === to) reason = value.spec.reason as Finding['reason'];
+  });
+  return reason;
 }
 
 export interface LinkCheckOptions {
@@ -116,7 +134,8 @@ export function linkCheck(options: LinkCheckOptions): LinkCheck {
     const byHref = new Map<string, string>();
     const messageAt = new Map(findings.map((f) => [`${f.from}:${f.to}`, f.message]));
     for (const link of scan.links) {
-      const message = link.href === null || link.label !== undefined ? undefined : messageAt.get(`${link.from}:${link.to}`);
+      // A wiki link names a note, not a path, so it says nothing about a link with the same text in a table.
+      const message = link.href === null || link.label !== undefined || link.kind === 'wiki' ? undefined : messageAt.get(`${link.from}:${link.to}`);
       if (message) byHref.set(link.href!, message);
     }
     publish(v, findings, byHref);

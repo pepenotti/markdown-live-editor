@@ -386,6 +386,13 @@ body {
   text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
+/* A wiki link to a note that does not exist yet: dim and dashed rather than wavy. */
+#app .cm-md-broken-link.cm-md-missing-note {
+  color: var(--mdl-dim);
+  text-decoration: underline dashed var(--mdl-dim);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
 /* One underline, not the link's straight one on top of the wavy one. */
 #app .cm-md-link:has(.cm-md-broken-link),
 #app .cm-md-broken-link .cm-md-link {

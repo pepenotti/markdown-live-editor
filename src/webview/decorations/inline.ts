@@ -12,6 +12,7 @@ import { getAttr, imgTags, isLoneImg } from '../htmlTag';
 import { footnotes, linkInfo } from '../links';
 import { footnoteId, texOf } from '../markdown';
 import { modeField, refreshDecorations } from '../modes';
+import { wikiLinkInfo } from '../wikiLinks';
 import { MathWidget } from '../widgets/rendered';
 import {
   AlertLabelWidget,
@@ -309,6 +310,20 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
               const n = footnotes(state).numbers.get(id);
               decos.push(Decoration.replace({ widget: new FootnoteWidget(n === undefined ? id : String(n), false) }).range(from, end));
               atom(from, end, 'leading');
+            }
+            return false;
+          }
+
+          case 'WikiLink': {
+            const info = wikiLinkInfo(doc, from, to);
+            mark('cm-md-link cm-md-wikilink', info.shownFrom, info.shownTo, info.target || `#${info.heading}`);
+            if (touches(from, to)) {
+              mark('cm-md-mark', from, from + 2);
+              mark('cm-md-mark cm-md-url', from + 2, info.shownFrom);
+              mark('cm-md-mark', info.shownTo, to);
+            } else {
+              hide(from, info.shownFrom);
+              hide(info.shownTo, to);
             }
             return false;
           }

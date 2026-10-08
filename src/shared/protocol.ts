@@ -30,6 +30,8 @@ export interface EditorConfig {
   spellCheck: boolean;
   /** Underline links whose file or heading does not exist. */
   checkLinks: boolean;
+  /** Treat `[[Note]]` as a link to another note. Off by default: it is not standard Markdown. */
+  wikiLinks: boolean;
 }
 
 /**
@@ -105,7 +107,7 @@ export type HostMessage =
   | { type: 'selectionRequest'; reqId: number }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
-export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'checkLinks';
+export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'checkLinks' | 'listNotes' | 'noteHeadings';
 
 export interface SaveImagePayload {
   name: string;
@@ -119,10 +121,19 @@ export interface ResolveUrisPayload {
 }
 /** Asks which of these link targets do not exist. The reply has one entry per target, null when it is fine. */
 export interface CheckLinksPayload {
-  targets: { path: string; anchor: string }[];
+  /** `wiki` marks the target of a wiki link: `path` is then a note name. */
+  targets: { path: string; anchor: string; wiki?: boolean }[];
 }
 export interface CheckLinksResult {
-  issues: (({ reason: 'file' } | { reason: 'anchor'; suggestion?: string }) | null)[];
+  issues: (({ reason: 'file' } | { reason: 'anchor'; suggestion?: string } | { reason: 'note' } | { reason: 'ambiguous' }) | null)[];
+}
+/** Answer to `listNotes`: the notes a wiki link can point to. */
+export interface ListNotesResult {
+  notes: { name: string; path: string }[];
+}
+/** Asks for the headings of a note. Answered with `{ headings: string[] }`. */
+export interface NoteHeadingsPayload {
+  name: string;
 }
 export interface LinkedFile {
   /** Path relative to the document, already encoded for use inside a Markdown link. */
@@ -139,6 +150,7 @@ export type WebviewMessage =
   | { type: 'modeChanged'; mode: Mode }
   | { type: 'stats'; words: number; chars: number; selWords: number }
   | { type: 'openLink'; href: string }
+  | { type: 'openWikiLink'; target: string; heading: string }
   | { type: 'request'; reqId: number; kind: RequestKind; payload?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'selectionState'; reqId: number; text: string }
@@ -148,9 +160,11 @@ export type WebviewMessage =
       text: string;
       mode: Mode;
       epoch: number;
+      /** Zero-based line of the cursor. */
+      cursorLine: number;
       problems: string[];
-      /** How many diagrams and formulas are drawn on screen, and how many diagrams failed. */
-      rendered: { diagrams: number; diagramErrors: number; math: number };
+      /** How many diagrams, formulas and wiki links are drawn on screen, and how many diagrams failed. */
+      rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number };
       /** Reasons of the links currently underlined as broken, in document order. */
       brokenLinks: string[];
     };

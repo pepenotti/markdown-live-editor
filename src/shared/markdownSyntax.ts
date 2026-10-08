@@ -157,5 +157,41 @@ export const footnotes: MarkdownConfig = {
   ],
 };
 
+/**
+ * Wiki links: `[[Note]]`, `[[Note#Heading]]`, `[[Note|shown text]]`. They are not standard
+ * Markdown, so this extension is NOT part of the default set: the editor and the host add
+ * it only while `seamlessMarkdown.wikiLinks` is on.
+ */
+export const wikiLink: MarkdownConfig = {
+  defineNodes: [{ name: 'WikiLink' }, { name: 'WikiLinkMark', style: t.processingInstruction }],
+  parseInline: [
+    {
+      name: 'WikiLink',
+      before: 'Link',
+      parse(cx, next, pos) {
+        // "[[^1]]" stays a footnote reference in brackets.
+        if (next !== 91 || cx.char(pos + 1) !== 91 || cx.char(pos + 2) === 94) return -1;
+        let blank = true;
+        for (let i = pos + 2; i < cx.end; i++) {
+          const ch = cx.char(i);
+          if (ch === 10 || ch === 91) return -1;
+          if (ch === 93) {
+            if (blank || cx.char(i + 1) !== 93) return -1;
+            return cx.addElement(cx.elt('WikiLink', pos, i + 2, [cx.elt('WikiLinkMark', pos, pos + 2), cx.elt('WikiLinkMark', i, i + 2)]));
+          }
+          if (ch !== 32 && ch !== 9) blank = false;
+        }
+        return -1;
+      },
+    },
+  ],
+};
+
 /** CommonMark + GFM + front matter + math + footnotes, without any editor around it. */
 export const markdownParser = baseParser.configure([GFM, frontMatter, math, footnotes]);
+
+let withWikiLinks: typeof markdownParser | undefined;
+/** The same parser with wiki links added. Built the first time it is asked for. */
+export function wikiMarkdownParser(): typeof markdownParser {
+  return (withWikiLinks ??= markdownParser.configure([wikiLink]));
+}

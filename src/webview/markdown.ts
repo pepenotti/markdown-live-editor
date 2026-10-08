@@ -2,7 +2,7 @@
 import { commonmarkLanguage, markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { GFM } from '@lezer/markdown';
-import { footnotes, frontMatter, math } from '../shared/markdownSyntax';
+import { footnotes, frontMatter, math, wikiLink } from '../shared/markdownSyntax';
 
 export { footnotes, math };
 
@@ -26,10 +26,10 @@ export function withTex(source: string, tex: string): string | null {
   return mark + body + mark;
 }
 
-export function markdownSupport() {
+export function markdownSupport(options: { wikiLinks?: boolean } = {}) {
   return markdown({
     base: commonmarkLanguage,
-    extensions: [GFM, frontMatter, math, footnotes],
+    extensions: [GFM, frontMatter, math, footnotes, ...(options.wikiLinks ? [wikiLink] : [])],
     codeLanguages: languages,
     addKeymap: false,
     completeHTMLTags: false,

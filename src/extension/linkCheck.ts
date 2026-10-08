@@ -17,6 +17,8 @@ import {
   withIssues,
 } from '../shared/linkCheck';
 import { toLF } from '../shared/textUtil';
+import type { FileWatch } from './fileWatch';
+import { type NoteIndex, wikiLinksEnabled } from './notes';
 
 export const DIAGNOSTIC_SOURCE = 'Seamless Markdown';
 
@@ -67,18 +69,26 @@ export class LinkChecker implements vscode.Disposable {
   private readonly published = new Map<string, Published>();
   /** Heading slugs of each open document, to notice when links from other files are affected. */
   private readonly signatures = new Map<string, string>();
-  /** Watchers for the folders of documents that are outside every workspace folder. */
-  private readonly folderWatchers = new Map<string, vscode.Disposable>();
-  private workspaceWatcher: vscode.Disposable | undefined;
   private filesTimer: ReturnType<typeof setTimeout> | undefined;
   /** Documents that were opened in this editor; they stay checked until they close, wherever they are. */
   private readonly adopted = new Set<string>();
   private readonly openAnchors = new WeakMap<vscode.TextDocument, { version: number; anchors: Anchors }>();
 
-  /** @param recheck asks the open editors to check their links again. */
-  constructor(private readonly recheck: () => void) {
+  /**
+   * @param recheck asks the open editors to check their links again.
+   * @param watch the shared file watchers; this class says which folders it needs.
+   * @param notes resolves the names of wiki links. Only asked while wiki links are turned on.
+   */
+  constructor(
+    private readonly recheck: () => void,
+    private readonly watch: FileWatch,
+    private readonly notes: NoteIndex,
+  ) {
     const workspace = vscode.workspace;
     this.disposables.push(
+      watch.onDidChange((e) => this.filesChanged(e.uri)),
+      // A note that appears or goes away changes what a wiki link leads to, wherever it is.
+      notes.onDidChangeNotes(() => this.filesChanged()),
       workspace.onDidCreateFiles(() => this.filesChanged()),
       workspace.onDidDeleteFiles(() => this.filesChanged()),
       workspace.onDidRenameFiles(() => this.filesChanged()),
@@ -93,7 +103,8 @@ export class LinkChecker implements vscode.Disposable {
       }),
       workspace.onDidCloseTextDocument((document) => this.closed(document)),
       workspace.onDidChangeConfiguration((e) => {
-        if (!e.affectsConfiguration('seamlessMarkdown.checkLinks')) return;
+        // With wiki links on, "[[Note]]" is a link to a note; with them off it is what it was before.
+        if (!e.affectsConfiguration('seamlessMarkdown.checkLinks') && !e.affectsConfiguration('seamlessMarkdown.wikiLinks')) return;
         this.watchFolders();
         this.refreshAll();
       }),
@@ -142,6 +153,7 @@ export class LinkChecker implements vscode.Disposable {
 
   private async checkOne(document: vscode.Uri, target: Target): Promise<LinkIssue | null> {
     if (typeof target.path !== 'string' || target.path === '' || document.scheme === 'untitled') return null;
+    if (target.wiki) return this.checkNote(document, target);
     let uri: vscode.Uri;
     try {
       uri = resolveLinkPath(document, target.path);
@@ -153,6 +165,18 @@ export class LinkChecker implements vscode.Disposable {
     if (!target.anchor || !MARKDOWN_FILE.test(uri.path)) return null;
     const anchors = await this.anchors(uri, info);
     // A file that cannot be read as text is not reported: it exists, which is all that is known.
+    return anchors ? checkAnchor(anchors, target.anchor) : null;
+  }
+
+  /** A wiki link: the note has to exist and be the only one of that name, and have the heading. */
+  private async checkNote(document: vscode.Uri, target: Target): Promise<LinkIssue | null> {
+    // An editor that has not heard yet that the setting was turned off.
+    if (!wikiLinksEnabled(document)) return null;
+    const found = await this.notes.resolve(document, target.path);
+    if (found.status === 'missing') return { reason: 'note' };
+    if (found.status === 'ambiguous') return { reason: 'ambiguous' };
+    if (!target.anchor) return null;
+    const anchors = await this.anchors(found.uri, await this.info(found.uri));
     return anchors ? checkAnchor(anchors, target.anchor) : null;
   }
 
@@ -217,35 +241,7 @@ export class LinkChecker implements vscode.Disposable {
       const dir = dirOf(document.uri);
       wanted.set(dir.toString(), dir);
     }
-    if (any && !this.workspaceWatcher) {
-      const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-      this.workspaceWatcher = vscode.Disposable.from(
-        watcher,
-        watcher.onDidCreate((uri) => this.filesChanged(uri)),
-        watcher.onDidDelete((uri) => this.filesChanged(uri)),
-        // A saved Markdown file may have gained or lost headings.
-        watcher.onDidChange((uri) => this.filesChanged(uri)),
-      );
-    } else if (!any && this.workspaceWatcher) {
-      this.workspaceWatcher.dispose();
-      this.workspaceWatcher = undefined;
-    }
-    for (const [key, watcher] of this.folderWatchers) {
-      if (wanted.has(key)) continue;
-      watcher.dispose();
-      this.folderWatchers.delete(key);
-    }
-    for (const [key, dir] of wanted) {
-      if (this.folderWatchers.has(key)) continue;
-      // Not recursive: watching a whole tree outside the workspace could be very large.
-      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(dir, '*'));
-      const events = [
-        watcher.onDidCreate((uri) => this.filesChanged(uri)),
-        watcher.onDidDelete((uri) => this.filesChanged(uri)),
-        watcher.onDidChange((uri) => this.filesChanged(uri)),
-      ];
-      this.folderWatchers.set(key, vscode.Disposable.from(watcher, ...events));
-    }
+    this.watch.want(this, any, wanted.values());
   }
 
   /* ---------- diagnostics ---------- */
@@ -289,7 +285,7 @@ export class LinkChecker implements vscode.Disposable {
   /** The findings of a document as it is right now. */
   async findings(document: vscode.TextDocument): Promise<{ findings: Finding[]; scan: DocumentScan; text: string }> {
     const text = toLF(document.getText());
-    const scan = scanText(text);
+    const scan = scanText(text, wikiLinksEnabled(document.uri));
     const analysis = analyse(scan);
     return { findings: withIssues(analysis, await this.check(document.uri, analysis.targets)), scan, text };
   }
@@ -359,11 +355,9 @@ export class LinkChecker implements vscode.Disposable {
 
   dispose(): void {
     clearTimeout(this.filesTimer);
-    this.workspaceWatcher?.dispose();
+    this.watch.want(this, false);
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
-    for (const watcher of this.folderWatchers.values()) watcher.dispose();
-    this.folderWatchers.clear();
     for (const d of this.disposables.splice(0)) d.dispose();
   }
 }

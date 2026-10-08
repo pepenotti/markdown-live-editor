@@ -9,6 +9,7 @@ import { escapeHtml, highlight } from './highlight';
 import { FRONT_MATTER_NEXT } from './markdownSyntax';
 import { mathPlugin } from './mathPlugin';
 import { extractHeadings, headingPlainText, headingSlugs, slugify } from './textUtil';
+import { type WikiHref, wikiLinkPlugin } from './wikiLinkPlugin';
 
 /** Major version of Mermaid loaded from the CDN; kept equal to the one the editor bundles. */
 export const MERMAID_CDN_MAJOR = 12;
@@ -21,6 +22,12 @@ export interface RenderOptions {
   mermaid?: boolean;
   /** Replacement URLs for image sources, keyed by the source as it appears in the rendered HTML. */
   images?: ReadonlyMap<string, string>;
+  /**
+   * Given only while wiki links are turned on: `[[Note]]` is then a link to the URL this
+   * returns for the note, or just its text when it returns null. Left out, double brackets
+   * are rendered like any other text.
+   */
+  wikiLinks?: WikiHref;
 }
 
 export interface Rendered {
@@ -107,6 +114,7 @@ function build(): Markdown {
   });
   mathPlugin(md, renderMath);
   footnotePlugin(md);
+  wikiLinkPlugin(md, (env) => ours(env).options?.wikiLinks);
 
   // Ids on headings, so links such as [x](#some-heading) and a table of contents work.
   // The anchors are the ones the rest of the extension uses (`headingSlugs`), matched by line.
