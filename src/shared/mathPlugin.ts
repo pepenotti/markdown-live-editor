@@ -2,16 +2,10 @@
 // src/webview/markdown.ts): `$x$` and `$$x$$` inline, and a `$$` block. A dollar sign
 // followed by a space, or a closing one followed by a digit, stays plain text, so prices are not math.
 import type { MarkdownIt } from 'markdown-it';
+import { texOf } from './markdownSyntax';
 
 const DOLLAR = 36;
 const BACKSLASH = 92;
-
-/** The TeX inside the source of a math node. */
-export function texOf(source: string): string {
-  const width = source.startsWith('$$') ? 2 : 1;
-  const end = source.endsWith('$'.repeat(width)) && source.length >= width * 2 ? source.length - width : source.length;
-  return source.slice(width, end).trim();
-}
 
 /**
  * End of the inline math that starts at `pos` (just past its closing dollars), or -1.

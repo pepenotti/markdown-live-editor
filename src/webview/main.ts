@@ -1,13 +1,14 @@
 // Entry point of the webview: builds the CodeMirror editor and wires it to the host.
 import { closeBrackets } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { codeFolding, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
+import { codeFolding, ensureSyntaxTree, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { drawSelection, dropCursor, EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { classHighlighter, tagHighlighter, tags } from '@lezer/highlight';
 import {
+  type CheckLinksResult,
   type CommandId,
   type EditorConfig,
   type HostMessage,
@@ -16,7 +17,9 @@ import {
   type Mode,
   MODES,
 } from '../shared/protocol';
-import { countWords, extractHeadings, slugify } from '../shared/textUtil';
+import { findHeading, scanDocument } from '../shared/linkCheck';
+import { countWords, extractHeadings, headingSlugs, slugify } from '../shared/textUtil';
+import { DEFAULT_TOC_OPTIONS } from '../shared/toc';
 import {
   type FormatCommand,
   insertBlock,
@@ -25,6 +28,8 @@ import {
   insertPaths,
   insertRule,
   insertTable,
+  insertToc,
+  pasteMarkdown,
   setHeading,
   shiftHeading,
   toggleInline,
@@ -38,6 +43,8 @@ import { inlinePlugin } from './decorations/inline';
 import { editingBehaviour } from './fullMode';
 import { editGuard } from './guard';
 import { HostBridge } from './host';
+import { type Conversion, hasFormattedText, markdownForPaste } from './htmlToMarkdown';
+import { brokenLinkMessages, linkCheck } from './linkCheck';
 import { focusPopover, popoverField } from './linkPopover';
 import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
@@ -66,8 +73,13 @@ let sync: SyncClient | undefined;
 let toolbar: Toolbar | undefined;
 let config: EditorConfig;
 let isMac = /Mac/.test(navigator.platform);
+let testSession = false;
 let resolveUrl: (src: string) => string = (s) => s;
 const renderCompartment = new Compartment();
+const links = linkCheck({
+  check: async (targets) => (await host.request<CheckLinksResult>('checkLinks', { targets })).issues,
+  onError: (message) => report(message),
+});
 
 const markdownHighlighter = tagHighlighter([
   { tag: tags.monospace, class: 'tok-monospace' },
@@ -112,6 +124,7 @@ function applyConfig(next: EditorConfig): void {
   custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
   for (const cell of document.querySelectorAll<HTMLElement>('.cm-md-cell')) cell.spellcheck = !!next.spellCheck;
+  links.setEnabled(next.checkLinks !== false);
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
 }
 
@@ -144,18 +157,21 @@ function revealLine(line: number): void {
 
 function revealAnchor(anchor: string): void {
   if (!view) return;
-  const wanted = slugify(decodeURIComponent(anchor.replace(/^#/, '')));
-  const seen = new Map<string, number>();
-  for (const h of extractHeadings(view.state.doc.toString())) {
-    // Repeated headings get -1, -2, … like on GitHub.
-    const base = slugify(h.text.replace(/[*_`~]/g, ''));
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    if ((count ? `${base}-${count}` : base) === wanted) {
-      revealLine(h.line);
-      return;
-    }
+  let name = anchor.replace(/^#/, '');
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // Not percent-encoded after all.
   }
+  const state = view.state;
+  const text = state.doc.toString();
+  const headings = extractHeadings(text);
+  const index = headingSlugs(headings).indexOf(slugify(name));
+  if (index >= 0) return revealLine(headings[index].line);
+  // What the line scan does not see but the link check accepts: setext headings and headings inside quotes or lists.
+  const tree = ensureSyntaxTree(state, state.doc.length, 500) ?? syntaxTree(state);
+  const heading = findHeading(scanDocument(tree, text).headings, name);
+  if (heading) revealLine(state.doc.lineAt(heading.from).number - 1);
 }
 
 function openLink(href: string): void {
@@ -240,6 +256,8 @@ function runCommand(id: CommandId, arg?: unknown): void {
       return apply(insertCodeBlock);
     case 'rule':
       return apply(insertRule);
+    case 'toc':
+      return apply(insertToc(config.toc ?? DEFAULT_TOC_OPTIONS));
     case 'bulletList':
       return apply(toggleList('bullet'));
     case 'orderedList':
@@ -271,6 +289,8 @@ function runCommand(id: CommandId, arg?: unknown): void {
       return revealLine(Number(arg) || 0);
     case 'revealAnchor':
       return revealAnchor(String(arg ?? ''));
+    case 'recheckLinks':
+      return links.recheck();
     case 'focus':
       v.focus();
       return;
@@ -308,6 +328,9 @@ function hrefAt(state: EditorState, pos: number): string | null {
   return null;
 }
 
+/** When Shift+V was last pressed with the paste modifier: the mark of "paste as plain text". */
+let plainPasteKey = 0;
+
 /** Where Ctrl/Cmd+click on a footnote leads: from a reference to its text, from the text back to the reference. */
 function footnoteTarget(state: EditorState, pos: number): number | null {
   const note = footnoteAt(state, pos);
@@ -317,6 +340,13 @@ function footnoteTarget(state: EditorState, pos: number): number | null {
 }
 
 const domHandlers = EditorView.domEventHandlers({
+  keydown(event) {
+    // A paste event does not say that Shift was held. Chromium's "paste and match style" (Ctrl/Cmd+Shift+V)
+    // hands over a clipboard with only text/plain, but nothing promises that everywhere, and the
+    // link and table shortcuts work from the plain text, so the key press is remembered as well.
+    plainPasteKey = event.shiftKey && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v' ? Date.now() : 0;
+    return false;
+  },
   mousedown(event, v) {
     if (event.button !== 0 || !(isMac ? event.metaKey : event.ctrlKey)) return false;
     const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
@@ -337,14 +367,18 @@ const domHandlers = EditorView.domEventHandlers({
     const data = event.clipboardData;
     if (!data) return false;
     const images = Array.from(data.files).filter((f) => f.type.startsWith('image/'));
-    if (images.length) {
+    const text = data.getData('text/plain');
+    if (images.length && !hasFormattedText(text, data.getData('text/html'))) {
       event.preventDefault();
       void insertImageFiles(images);
       return true;
     }
-    const text = data.getData('text/plain');
+    // Pasting with Shift held asks for the plain text exactly as it is: no link, table or Markdown conversion.
+    const plain = Date.now() - plainPasteKey < 1000;
+    plainPasteKey = 0;
+    if (plain) return false;
     const sel = v.state.selection.main;
-    if (!text || insideCode(v.state, sel.from)) return false;
+    if (insideCode(v.state, sel.from)) return false;
     const selected = v.state.doc.sliceString(sel.from, sel.to);
     const url = text.trim();
     if (!sel.empty && !selected.includes('\n') && /^(?:https?:\/\/|mailto:)\S+$/i.test(url) && !/^(?:https?:\/\/|mailto:)/i.test(selected) && !hrefAt(v.state, sel.from)) {
@@ -360,7 +394,17 @@ const domHandlers = EditorView.domEventHandlers({
       v.dispatch({ ...insertBlock(v.state, table), userEvent: 'input.paste' });
       return true;
     }
-    return false;
+    if (!config.pasteRichText) return false;
+    let rich: Conversion | null = null;
+    try {
+      rich = markdownForPaste(data.getData('text/html'), Array.from(data.types));
+    } catch (err) {
+      report(`Could not convert the pasted content: ${String(err)}`);
+    }
+    if (!rich) return false;
+    event.preventDefault();
+    v.dispatch(pasteMarkdown(v.state, rich.markdown, rich.block));
+    return true;
   },
   dragover(event) {
     const types = event.dataTransfer?.types ?? [];
@@ -438,6 +482,7 @@ function onUpdate(update: ViewUpdate): void {
 
 function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   isMac = message.isMac;
+  testSession = message.test === true;
   resolveUrl = makeResolver(message.baseUri, message.rootUri);
   config = message.config;
   applyConfig(message.config);
@@ -478,6 +523,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     editGuard,
     editingBehaviour(),
     popoverField,
+    links.extension,
     // VS Code owns undo for the document; only the standalone page keeps its own history.
     host.standalone ? [history(), keymap.of(historyKeymap)] : [],
     search({ top: true }),
@@ -566,7 +612,14 @@ host.onMessage((message) => {
           diagramErrors: document.querySelectorAll('.cm-md-mermaid[data-state="error"]').length,
           math: document.querySelectorAll('.cm-md-math .katex').length,
         },
+        brokenLinks: view ? brokenLinkMessages(view.state) : [],
       });
+      break;
+    case 'debugType':
+      if (view && testSession) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at, insert: message.text }, selection: { anchor: at + message.text.length }, userEvent: 'input.type' });
+      }
       break;
     case 'selectionRequest': {
       const sel = view?.state.selection.main;

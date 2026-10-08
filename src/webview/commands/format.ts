@@ -3,6 +3,7 @@
 import { syntaxTree } from '@codemirror/language';
 import { EditorSelection, type ChangeSpec, type EditorState, type Line, type SelectionRange, type TransactionSpec } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
+import { findTocMarkers, tocBlock, type TocOptions, tocUpdate } from '../../shared/toc';
 import { emptyTable } from '../table/model';
 
 export type FormatCommand = (state: EditorState) => TransactionSpec | null;
@@ -302,6 +303,43 @@ export function insertBlock(state: EditorState, text: string, select?: { from: n
   };
 }
 
+/**
+ * Replaces the selection with pasted Markdown, as one change. With `block` the text is put on
+ * lines of its own, with a blank line between it and whatever is around it.
+ */
+export function pasteMarkdown(state: EditorState, text: string, block: boolean): TransactionSpec {
+  const range = state.selection.main;
+  let from = range.from;
+  let to = range.to;
+  let before = '';
+  let after = '';
+  if (block) {
+    const first = state.doc.lineAt(from);
+    if (state.doc.sliceString(first.from, from).trim() === '') {
+      from = first.from;
+      if (!isBlank(state, first.number - 1)) before = '\n';
+    } else {
+      // The line is split here, so the spaces around the split would only be left dangling.
+      from -= /[ \t]*$/.exec(state.doc.sliceString(first.from, from))![0].length;
+      before = '\n\n';
+    }
+    const last = state.doc.lineAt(to);
+    if (state.doc.sliceString(to, last.to).trim() === '') {
+      to = last.to;
+      if (!isBlank(state, last.number + 1)) after = '\n';
+    } else {
+      to += /^[ \t]*/.exec(state.doc.sliceString(to, last.to))![0].length;
+      after = '\n\n';
+    }
+  }
+  return {
+    changes: { from, to, insert: before + text + after },
+    selection: EditorSelection.cursor(from + before.length + text.length),
+    scrollIntoView: true,
+    userEvent: 'input.paste',
+  };
+}
+
 export const insertCodeBlock: FormatCommand = (state) => {
   const range = state.selection.main;
   if (range.empty) return insertBlock(state, '```\n\n```', { from: 4, to: 4 });
@@ -327,6 +365,21 @@ export const insertRule: FormatCommand = (state) => {
 
 export function insertTable(rows = 3, cols = 3): FormatCommand {
   return (state) => insertBlock(state, emptyTable(rows, cols), { from: 2, to: 10 });
+}
+
+/**
+ * Inserts a table of contents at the cursor. A document has one table of contents:
+ * when it is already there, its list is brought up to date instead.
+ */
+export function insertToc(options: TocOptions): FormatCommand {
+  return (state) => {
+    const text = state.doc.toString();
+    if (findTocMarkers(text)) {
+      const edit = tocUpdate(text, options);
+      return edit ? { changes: edit, scrollIntoView: true, userEvent: USER_EVENT } : null;
+    }
+    return insertBlock(state, tocBlock(text, options));
+  };
 }
 
 const URL_RE = /^(?:https?:\/\/|mailto:|www\.)\S+$/i;

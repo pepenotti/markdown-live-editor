@@ -2,6 +2,8 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import {
+  type CheckLinksPayload,
+  type CheckLinksResult,
   type CommandId,
   type EditorConfig,
   type HostMessage,
@@ -16,6 +18,8 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { readTocOptions } from './toc';
+import { LinkChecker } from './linkCheck';
 
 export interface Stats {
   words: number;
@@ -35,8 +39,11 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     fontFamily: c.get<string>('fontFamily', ''),
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
+    pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    toc: readTocOptions(resource),
     spellCheck: c.get<boolean>('spellCheck', false),
+    checkLinks: c.get<boolean>('checkLinks', true),
   };
 }
 
@@ -131,6 +138,7 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
+          test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
         for (const done of this.readyWaiters.splice(0)) done();
@@ -190,6 +198,12 @@ export class Session implements SyncTarget {
         case 'resolveUris': {
           const uris = (payload as ResolveUrisPayload)?.uris;
           data = { items: await resolveUris(this.document, Array.isArray(uris) ? uris.map(String) : []) };
+          break;
+        }
+        case 'checkLinks': {
+          const targets = (payload as CheckLinksPayload)?.targets;
+          const wanted = Array.isArray(targets) ? targets.map((t) => ({ path: String(t?.path ?? ''), anchor: String(t?.anchor ?? '') })) : [];
+          data = { issues: await this.provider.links.check(this.document.uri, wanted) } satisfies CheckLinksResult;
           break;
         }
         default:
@@ -300,14 +314,20 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   /** Fires when the active session, its mode, focus or statistics change. */
   readonly onDidChange = this.changed.event;
   private readonly channel = vscode.window.createOutputChannel('Seamless Markdown');
+  /** Looks at the file system for broken links and publishes them as diagnostics. */
+  readonly links: LinkChecker;
 
   constructor(readonly context: vscode.ExtensionContext) {
-    context.subscriptions.push(this.changed, this.channel);
+    this.links = new LinkChecker(() => {
+      for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
+    });
+    context.subscriptions.push(this.changed, this.channel, this.links);
   }
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
     const session = new Session(this, document, panel);
     this.sessions.add(session);
+    this.links.adopt(document);
     panel.onDidDispose(() => {
       this.sessions.delete(session);
       session.dispose();

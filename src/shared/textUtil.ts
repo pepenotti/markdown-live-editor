@@ -91,16 +91,51 @@ export function slugify(heading: string): string {
     .replace(/\s/g, '-');
 }
 
+/**
+ * The text of a heading as it reads once rendered: links and images become their text,
+ * and emphasis, code and strikethrough markers are dropped.
+ */
+export function headingPlainText(text: string): string {
+  return (
+    text
+      // A footnote reference is a raised number, not part of the heading.
+      .replace(/\[\^[^\]\s]+\]/g, '')
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/!?\[([^\]]*)\]\[[^\]]*\]/g, '$1')
+      .replace(/[*`~]/g, '')
+      // An underscore is emphasis only at the edge of a word; snake_case keeps its own.
+      .replace(/(^|[^\p{L}\p{N}_])_+(?=\S)/gu, '$1')
+      .replace(/(?<=\S)_+(?=[^\p{L}\p{N}_]|$)/gu, '')
+      .trim()
+  );
+}
+
+/**
+ * The anchor of each heading, in document order. Repeated headings get -1, -2, …
+ * like on GitHub.
+ */
+export function headingSlugs(headings: readonly { text: string }[]): string[] {
+  const seen = new Map<string, number>();
+  return headings.map((h) => {
+    const base = slugify(headingPlainText(h.text));
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count ? `${base}-${count}` : base;
+  });
+}
+
 export interface Heading {
   level: number;
   text: string;
   line: number;
 }
 
-/** Headings of a Markdown document, skipping fenced code blocks and front matter. */
-export function extractHeadings(text: string): Heading[] {
+/**
+ * Calls `visit` for every line that is ordinary Markdown: the lines of fenced code
+ * blocks (fences included) and of the front matter are left out.
+ */
+export function eachContentLine(text: string, visit: (line: string, index: number) => void): void {
   const lines = toLF(text).split('\n');
-  const out: Heading[] = [];
   let fence: string | null = null;
   let i = 0;
   if (lines[0] !== undefined && /^---\s*$/.test(lines[0])) {
@@ -119,10 +154,17 @@ export function extractHeadings(text: string): Heading[] {
       else if (f[1][0] === fence[0] && f[1].length >= fence.length && /^ {0,3}[`~]+\s*$/.test(line)) fence = null;
       continue;
     }
-    if (fence !== null) continue;
+    if (fence === null) visit(line, i);
+  }
+}
+
+/** Headings of a Markdown document, skipping fenced code blocks and front matter. */
+export function extractHeadings(text: string): Heading[] {
+  const out: Heading[] = [];
+  eachContentLine(text, (line, i) => {
     const h = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line);
     if (h) out.push({ level: h[1].length, text: h[2], line: i });
-  }
+  });
   return out;
 }
 

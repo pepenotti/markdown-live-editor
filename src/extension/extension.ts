@@ -6,6 +6,7 @@ import { exportHtml, exportPdf } from './export';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
+import { insertTocInTextEditor, updateToc, updateTocOnSave } from './toc';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
@@ -163,6 +164,34 @@ export function activate(context: vscode.ExtensionContext): unknown {
   );
   register('exportPdf', exporting('The PDF export', (session) => exportPdf(session.document)));
 
+  /* ---------- table of contents ---------- */
+  // Both commands also work in the plain text editor.
+  const markdownTextEditor = () => {
+    const editor = vscode.window.activeTextEditor;
+    return editor && editor.document.languageId === 'markdown' ? editor : undefined;
+  };
+  register('insertTableOfContents', async () => {
+    const session = provider.active;
+    if (session) return session.send('toc');
+    const editor = markdownTextEditor();
+    if (editor) await insertTocInTextEditor(editor);
+  });
+  register('updateTableOfContents', async () => {
+    const session = provider.active;
+    const document = session?.document ?? markdownTextEditor()?.document;
+    if (!document) return;
+    await session?.flush();
+    const result = await updateToc(document);
+    if (result === 'missing') {
+      void vscode.window.showInformationMessage('This document has no table of contents. Add one with "Seamless Markdown: Insert Table of Contents".');
+    } else if (result === 'unchanged') {
+      vscode.window.setStatusBarMessage('The table of contents is up to date', 3000);
+    } else if (result === 'refused') {
+      void vscode.window.showWarningMessage('The table of contents could not be updated: the document cannot be edited.');
+    }
+  });
+  context.subscriptions.push(updateTocOnSave(provider));
+
   register('setAsDefault', async () => {
     await provider.setDefault(true);
     void vscode.window.showInformationMessage('Markdown files now open with Seamless Markdown.');
@@ -227,6 +256,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
     listFiles: async (uri: vscode.Uri, imagesOnly: boolean) => listFiles((await only(uri)).document, imagesOnly),
     resolveUris: async (uri: vscode.Uri, uris: string[]) => resolveUris((await only(uri)).document, uris),
+    checkLinks: async (uri: vscode.Uri, targets: { path: string; anchor: string }[]) => provider.links.check(uri, targets),
   } satisfies Record<string, (uri: vscode.Uri, ...rest: any[]) => unknown>;
 }
 

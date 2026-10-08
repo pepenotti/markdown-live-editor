@@ -5,13 +5,17 @@ import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Range, RangeSet, RangeValue, StateField, type Text } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { findTocMarkers, isTocMarker } from '../../shared/toc';
 import { modeField, refreshDecorations, revealBlock } from '../modes';
 import { texOf } from '../markdown';
 import { MathWidget, MermaidWidget } from '../widgets/rendered';
 import { TableWidget } from '../widgets/table';
 
-/** rendered: a diagram or math block drawn in place of its source. */
-export type ProtectedKind = 'table' | 'frontmatter' | 'rendered' | 'fence-open' | 'fence-close';
+/**
+ * rendered: a diagram or math block drawn in place of its source.
+ * hidden: a line that is not shown at all (a table of contents marker in full preview).
+ */
+export type ProtectedKind = 'table' | 'frontmatter' | 'rendered' | 'hidden' | 'fence-open' | 'fence-close';
 
 /** Whole source lines that are drawn as a widget and must stay intact. */
 export class Protected extends RangeValue {
@@ -118,6 +122,8 @@ function build(state: EditorState, reveal: number | null): BlockState {
   const decos: Range<Decoration>[] = [];
   const prot: Range<Protected>[] = [];
   const revealed = (from: number, to: number) => reveal !== null && reveal >= from && reveal <= to;
+  /** Whole-line comments that read as table of contents markers. */
+  const markerLines: { from: number; to: number }[] = [];
 
   syntaxTree(state).iterate({
     enter(node) {
@@ -174,6 +180,12 @@ function build(state: EditorState, reveal: number | null): BlockState {
           }
           return false;
         }
+        case 'CommentBlock': {
+          // The two comments around a table of contents are bookkeeping, not content.
+          if (!full || !wholeLines(doc, node.from, node.to) || !isTocMarker(doc.sliceString(node.from, node.to))) return false;
+          markerLines.push({ from: node.from, to: node.to });
+          return false;
+        }
         case 'BulletList':
         case 'OrderedList':
         case 'ListItem':
@@ -184,6 +196,18 @@ function build(state: EditorState, reveal: number | null): BlockState {
       }
     },
   });
+
+  if (markerLines.length >= 2) {
+    // Only the pair that is kept up to date is hidden. A marker without its partner, or a
+    // second pair, stays visible so it can be seen and removed.
+    const pair = findTocMarkers(doc.toString());
+    for (const m of markerLines) {
+      const line = doc.lineAt(m.from).number - 1;
+      if (!pair || (line !== pair.startLine && line !== pair.endLine)) continue;
+      decos.push(Decoration.replace({ block: true }).range(m.from, m.to));
+      prot.push(new Protected('hidden', 0, 0).range(m.from, m.to));
+    }
+  }
 
   return { decorations: Decoration.set(decos, true), protected: RangeSet.of(prot, true), revealPos: reveal };
 }
