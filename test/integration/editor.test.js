@@ -75,6 +75,7 @@ suite('Seamless Markdown', () => {
     const state = await inStep(uri, document);
     assert.deepStrictEqual(state.problems, []);
     assert.strictEqual(document.isDirty, false, 'opening must not dirty the document');
+    assert.strictEqual(api.rendererLoaded(), false, 'opening an editor does not load the export renderer');
     for (const mode of ['full', 'raw', 'half']) {
       await api.command(uri, 'setMode', mode);
       await until(async () => (await api.mode(uri)) === mode, `mode ${mode}`);
@@ -464,6 +465,105 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString()).isDirty, false);
   });
 
+  test('embeds only real images from the folder of the document', async () => {
+    const outside = path.join(dir, '..', `${path.basename(dir)}-outside.png`);
+    fs.copyFileSync(path.join(dir, 'assets', 'photo.png'), outside);
+    fs.writeFileSync(path.join(dir, 'fake.png'), '-----BEGIN OPENSSH PRIVATE KEY-----\nnot an image\n');
+    fs.writeFileSync(
+      path.join(dir, 'embed.md'),
+      [
+        '![real](assets/photo.png)',
+        '![fake](fake.png)',
+        `![outside](../${path.basename(outside)})`,
+        '![climbing](assets/../../../../../../etc/hosts)',
+        '<img src="notes/other.md" alt="markdown">',
+        '<img src="plain.md" alt="text">',
+        '![absolute](/etc/hosts)',
+        '![through a link](linked/photo.png)',
+      ].join('\n\n') + '\n',
+    );
+    // A folder inside the document folder that is really a link to somewhere else.
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'mdl-elsewhere-'));
+    fs.copyFileSync(path.join(dir, 'assets', 'photo.png'), path.join(elsewhere, 'photo.png'));
+    if (process.platform !== 'win32') fs.symlinkSync(elsewhere, path.join(dir, 'linked'));
+    try {
+      await open('embed.md');
+      const target = vscode.Uri.file(path.join(dir, 'embed-export.html'));
+      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      const html = fs.readFileSync(target.fsPath, 'utf8');
+      assert.strictEqual((html.match(/src="data:/g) || []).length, 1, 'only the real image is embedded');
+      assert.ok(/<img src="data:image\/png;base64,[A-Za-z0-9+/=]+" alt="real">/.test(html));
+      assert.ok(html.includes('<img src="fake.png" alt="fake">'), 'a file that is not an image keeps its path');
+      assert.ok(html.includes(`<img src="../${path.basename(outside)}" alt="outside">`), 'an image outside the folder keeps its path');
+      assert.ok(html.includes('<img src="notes/other.md" alt="markdown">'));
+      assert.ok(html.includes('<img src="plain.md" alt="text">'));
+      assert.ok(!html.includes('First line'), 'no other file leaks into the export');
+      assert.ok(!html.includes('OPENSSH') && !html.includes(Buffer.from('-----BEGIN OPENSSH').toString('base64').slice(0, 16)));
+      assert.ok(!html.includes('localhost'), 'nothing from /etc/hosts');
+      assert.ok(html.includes('<img src="linked/photo.png" alt="through a link">'), 'a linked folder that leads elsewhere is not followed');
+    } finally {
+      fs.rmSync(outside, { force: true });
+      fs.rmSync(path.join(dir, 'linked'), { force: true });
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  test('exports footnotes and alerts, and blocks scripts from the document', async () => {
+    await open('footnotes.md');
+    const target = vscode.Uri.file(path.join(dir, 'footnotes-export.html'));
+    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    const html = fs.readFileSync(target.fsPath, 'utf8');
+    assert.ok(html.includes('first used<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup>'), 'first reference is note 1');
+    assert.ok(html.includes('called<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup>'), 'second note is note 2');
+    assert.ok(html.includes('[^missing] stays as text'), 'an undefined note stays text');
+    assert.ok(/<section class="footnotes">\n<ol>\n<li id="fn-1">The second definition\ncontinues on the next line\. /.test(html), 'the list is in reference order');
+    assert.ok(!html.includes('Nothing points here'), 'an unused note is left out');
+    assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="default-src 'none';`), 'the file carries a policy');
+    assert.ok(!html.includes('script-src'), 'no script may run');
+
+    await open('features.md');
+    const features = vscode.Uri.file(path.join(dir, 'features-alerts.html'));
+    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', features);
+    const alerts = fs.readFileSync(features.fsPath, 'utf8');
+    assert.ok(alerts.includes('<blockquote class="alert alert-note">\n<p><strong class="alert-title">Note</strong><br>'), 'a note callout');
+    assert.ok(alerts.includes('<blockquote class="alert alert-warning">'), 'a warning callout');
+  });
+
+  test('reports an export that cannot be written instead of failing silently', async function () {
+    if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) return this.skip();
+    await open('plain.md');
+    const locked = path.join(dir, 'locked');
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0o555);
+    try {
+      const target = vscode.Uri.file(path.join(locked, 'out.html'));
+      const written = await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      assert.strictEqual(written, undefined, 'the command reports no file');
+      assert.ok(!fs.existsSync(target.fsPath));
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+  });
+
+  test('the PDF export without a printing browser hands a print version to the default browser', async () => {
+    const { uri } = await open('features.md');
+    const { file, opened } = await api.exportPdfWithoutBrowser(uri);
+    assert.ok(file, 'a print version was written');
+    assert.deepStrictEqual(opened, [file], 'exactly that file is opened');
+    assert.strictEqual(path.basename(file), 'features.html');
+    assert.ok(path.basename(path.dirname(file)).startsWith('seamless-markdown-export-'), 'in a temporary folder of its own');
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(path.dirname(file)).mode & 0o077, 0, 'that only this user can read');
+    const html = fs.readFileSync(file, 'utf8');
+    assert.ok(html.includes('<title>Seamless Markdown</title>'));
+    assert.ok(html.includes('@page{margin:'), 'page margins');
+    assert.ok(html.includes('break-after:avoid'), 'page-break rules');
+    assert.ok(!html.includes('prefers-color-scheme'), 'no dark variant');
+    assert.ok(/<img src="data:image\/png;base64,/.test(html), 'images are embedded whatever the setting says');
+    // A second export gets a folder of its own, so two documents with one name do not collide.
+    const again = await api.exportPdfWithoutBrowser(uri);
+    assert.notStrictEqual(again.file, file);
+  });
+
   test('exports math as MathML and, by default, a diagram as its source', async () => {
     await open('diagrams.md');
     const target = vscode.Uri.file(path.join(dir, 'diagrams-export.html'));
@@ -481,7 +581,9 @@ suite('Seamless Markdown', () => {
       await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
       const drawn = fs.readFileSync(target.fsPath, 'utf8');
       assert.ok(drawn.includes('<pre class="mermaid">flowchart LR'), 'the diagram is left for Mermaid to draw');
-      assert.ok(/<script type="module">\s*import mermaid from 'https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@\d+\//.test(drawn), 'Mermaid comes from the CDN');
+      const script = /<script type="module" nonce="([0-9a-f]+)">\s*import mermaid from '(https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@\d+\/)/.exec(drawn);
+      assert.ok(script, 'Mermaid comes from the CDN');
+      assert.ok(drawn.includes(`script-src 'nonce-${script[1]}' ${script[2]}"`), 'and is the only script the policy allows');
     } finally {
       await settings.update('mermaidFromCdn', undefined, vscode.ConfigurationTarget.Global);
     }

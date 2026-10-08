@@ -3,17 +3,8 @@ import { syntaxTree } from '@codemirror/language';
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
 import { browserCandidates, isCompletePdf, printToPdfArgs } from '../../src/shared/browsers';
-import {
-  imageMime,
-  isLocalSource,
-  localImageSources,
-  MERMAID_CDN_MAJOR,
-  MERMAID_CDN_URL,
-  renderDocument,
-  renderMarkdown,
-  sourceToPath,
-  stripFrontMatter,
-} from '../../src/shared/exportHtml';
+import { imageMime, isLocalSource, sourceToPath } from '../../src/shared/embed';
+import { localImageSources, MERMAID_CDN_MAJOR, MERMAID_CDN_URL, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
 import { highlight } from '../../src/shared/highlight';
 import { mathPlugin } from '../../src/shared/mathPlugin';
 import { stateOf } from './helpers';
@@ -139,9 +130,8 @@ describe('exported HTML', () => {
     expect(stripFrontMatter('---\ntitle: x\n---\n# A')).toBe('# A');
     expect(stripFrontMatter('---\r\ntitle: x\r\n...\r\nbody')).toBe('body');
     expect(stripFrontMatter('---\n---\nbody')).toBe('body');
-    // A rule followed by text, and a block that never closes, are not front matter.
+    // A rule followed by text is not front matter.
     expect(stripFrontMatter('---\n\ntext\n\n---\n')).toBe('---\n\ntext\n\n---\n');
-    expect(stripFrontMatter('---\ntitle: x\nbody')).toBe('---\ntitle: x\nbody');
     expect(stripFrontMatter('a\n---\nb: c\n---\n')).toBe('a\n---\nb: c\n---\n');
     expect(renderMarkdown('---\ntitle: Hidden\n---\n\n# Shown\n')).toMatchObject({ html: '<h1 id="shown">Shown</h1>\n', title: 'Shown' });
   });

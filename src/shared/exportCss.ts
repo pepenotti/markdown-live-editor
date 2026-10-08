@@ -1,9 +1,11 @@
 // Style sheet embedded in exported HTML: readable, GitHub-like, light with a dark variant.
 
 const LIGHT = `--fg:#1f2328;--bg:#fff;--muted:#59636e;--border:#d1d9e0;--soft:#f6f8fa;--code:#eff1f3;--link:#0969da;
---k:#cf222e;--s:#0a3069;--n:#0550ae;--f:#8250df;--t:#953800;--g:#116329`;
+--k:#cf222e;--s:#0a3069;--n:#0550ae;--f:#8250df;--t:#953800;--g:#116329;
+--note:#0969da;--tip:#1a7f37;--important:#8250df;--warning:#9a6700;--caution:#cf222e`;
 const DARK = `--fg:#f0f6fc;--bg:#0d1117;--muted:#9198a1;--border:#3d444d;--soft:#151b23;--code:#262c36;--link:#4493f8;
---k:#ff7b72;--s:#a5d6ff;--n:#79c0ff;--f:#d2a8ff;--t:#ffa657;--g:#7ee787`;
+--k:#ff7b72;--s:#a5d6ff;--n:#79c0ff;--f:#d2a8ff;--t:#ffa657;--g:#7ee787;
+--note:#4493f8;--tip:#3fb950;--important:#ab7df8;--warning:#d29922;--caution:#f85149`;
 
 const BASE = `
 *{box-sizing:border-box}
@@ -27,6 +29,17 @@ img{max-width:100%;height:auto;vertical-align:middle}
 hr{height:.25em;margin:1.5em 0;border:0;background:var(--border)}
 blockquote{padding:0 1em;color:var(--muted);border-left:.25em solid var(--border)}
 blockquote>:last-child{margin-bottom:0}
+.alert{padding:.5em 1em;color:inherit;border-left-color:var(--alert)}
+.alert-title{color:var(--alert)}
+.alert-note{--alert:var(--note)}
+.alert-tip{--alert:var(--tip)}
+.alert-important{--alert:var(--important)}
+.alert-warning{--alert:var(--warning)}
+.alert-caution{--alert:var(--caution)}
+.footnote-ref{font-size:.75em;line-height:0}
+.footnotes{margin-top:2em;padding-top:1em;font-size:.875em;color:var(--muted);border-top:1px solid var(--border)}
+.footnotes li:target{color:var(--fg)}
+.footnote-back{font-family:"Segoe UI Symbol","Apple Symbols",sans-serif}
 ul,ol{padding-left:2em}
 li+li{margin-top:.25em}
 li>ul,li>ol{margin:.25em 0 0}
@@ -65,7 +78,7 @@ body{font-size:11pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .markdown-body{max-width:none;padding:0}
 h1,h2,h3,h4,h5,h6{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}
 p,li{orphans:3;widows:3}
-pre,blockquote,img,svg,tr,.math-block{break-inside:avoid;page-break-inside:avoid}
+pre,blockquote,img,svg,tr,.math-block,.footnotes li{break-inside:avoid;page-break-inside:avoid}
 pre,pre code{white-space:pre-wrap;overflow-wrap:anywhere}
 pre{overflow:visible}
 table{display:table;width:auto;overflow:visible}

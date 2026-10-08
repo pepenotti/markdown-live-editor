@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
-import { renderMarkdown } from '../shared/exportHtml';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
-import { exportHtml, exportPdf } from './export';
+import { exportHtml, exportPdf, removeTempFiles } from './export';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
+import { renderer, rendererLoaded } from './renderer';
 import { insertTocInTextEditor, updateToc, updateTocOnSave } from './toc';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
@@ -142,7 +142,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     if (!session) return;
     await session.flush();
     const selected = await session.selectedText();
-    const { html } = renderMarkdown(selected || session.document.getText());
+    const { html } = renderer().renderMarkdown(selected || session.document.getText());
     await vscode.env.clipboard.writeText(html);
     vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
   });
@@ -163,6 +163,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     exporting('The HTML export', (session) => exportHtml(session.document, target instanceof vscode.Uri ? target : undefined))(),
   );
   register('exportPdf', exporting('The PDF export', (session) => exportPdf(session.document)));
+  context.subscriptions.push({ dispose: removeTempFiles });
 
   /* ---------- table of contents ---------- */
   // Both commands also work in the plain text editor.
@@ -251,6 +252,15 @@ export function activate(context: vscode.ExtensionContext): unknown {
     state: async (uri: vscode.Uri) => (await only(uri)).debugState(),
     states: async (uri: vscode.Uri) => Promise.all(provider.sessionsFor(uri).map((s) => s.debugState())),
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
+    rendererLoaded: () => rendererLoaded(),
+    // The PDF export on a machine without a browser that can print; returns what would have been opened.
+    exportPdfWithoutBrowser: async (uri: vscode.Uri) => {
+      const session = await only(uri);
+      await session.flush();
+      const opened: string[] = [];
+      const file = await exportPdf(session.document, { browser: null, open: async (target) => void opened.push(target.fsPath) });
+      return { file, opened };
+    },
     outline: async (uri: vscode.Uri) => buildOutline(extractHeadings((await only(uri)).document.getText())),
     openLink: async (uri: vscode.Uri, href: string) => provider.openLink(await only(uri), href),
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),

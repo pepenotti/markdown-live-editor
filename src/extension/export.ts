@@ -1,18 +1,20 @@
-// Export to HTML and PDF. The rendering is in src/shared/exportHtml.ts; this file reads
-// images, asks where to save, and drives a browser for the PDF.
-import { existsSync } from 'node:fs';
+// Export to HTML and PDF. The rendering is in src/shared/exportHtml.ts (loaded on demand);
+// this file reads images, asks where to save, and drives a browser for the PDF.
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { imageMime, localImageSources, renderDocument, sourceToPath } from '../shared/exportHtml';
+import { imageTarget, looksLikeImage, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES } from '../shared/embed';
 import { installedBrowser, printToPdf } from './pdf';
+import { renderer } from './renderer';
 
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const TEMP_PREFIX = 'seamless-markdown-export-';
+const STALE_MS = 24 * 60 * 60 * 1000;
 
 interface Built {
   html: string;
-  /** Local images that could not be embedded. */
+  /** Local images that were not embedded. */
   missing: string[];
   hasMermaid: boolean;
 }
@@ -34,35 +36,66 @@ function defaultTarget(document: vscode.TextDocument, extension: string): vscode
   return vscode.Uri.joinPath(folder, name);
 }
 
-/** Reads the local images of a document as data URIs, keyed by their source. */
+/** The path with every link in it followed; the path itself when that cannot be done. */
+async function realPath(file: string): Promise<string> {
+  const real = await fs.realpath(file).catch(() => file);
+  return process.platform === 'win32' ? real.toLowerCase() : real;
+}
+
+/**
+ * Reads the local images of a document as data URIs, keyed by their source.
+ *
+ * Only what the editor itself may show is read: image files in the folder of the document
+ * or, when the document is part of a workspace, in a workspace folder. Anything else — a
+ * file that is not an image, a path that leads elsewhere, a link to another place, a file
+ * that is too large — keeps its path and is reported.
+ */
 async function embedImages(document: vscode.TextDocument, text: string): Promise<{ images: Map<string, string>; missing: string[] }> {
   const images = new Map<string, string>();
   const missing: string[] = [];
-  const root = vscode.workspace.getWorkspaceFolder(document.uri)?.uri;
-  await Promise.all(
-    localImageSources(text).map(async (src) => {
-      const file = sourceToPath(src);
-      const mime = imageMime(file);
-      // Like in the editor, a leading slash means the project folder.
-      const base = file.startsWith('/') ? root : vscode.Uri.joinPath(document.uri, '..');
-      try {
-        if (!mime || !base || document.uri.scheme === 'untitled') throw new Error('not an image file that can be read');
-        const uri = vscode.Uri.joinPath(base, file);
-        if ((await vscode.workspace.fs.stat(uri)).size > MAX_IMAGE_BYTES) throw new Error('too large');
-        const bytes = await vscode.workspace.fs.readFile(uri);
-        images.set(src, `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`);
-      } catch {
-        missing.push(src);
+  const sources = renderer().localImageSources(text);
+  if (document.uri.scheme === 'untitled') return { images, missing: sources.sort() };
+
+  const sameFileSystem = (uri: vscode.Uri) => uri.scheme === document.uri.scheme && uri.authority === document.uri.authority;
+  const project = vscode.workspace.getWorkspaceFolder(document.uri)?.uri;
+  const documentFolder = vscode.Uri.joinPath(document.uri, '..').path;
+  const roots = [documentFolder];
+  if (project) for (const folder of vscode.workspace.workspaceFolders ?? []) if (sameFileSystem(folder.uri)) roots.push(folder.uri.path);
+
+  // Where the folders really are, so a link inside the project that leads out of it is noticed.
+  const local = document.uri.scheme === 'file';
+  const realRoots = local ? await Promise.all(roots.map((root) => realPath(document.uri.with({ path: root }).fsPath))) : [];
+
+  let total = 0;
+  // One at a time, so the size limit for the whole document is exact.
+  for (const src of sources) {
+    try {
+      const target = imageTarget(src, documentFolder, project?.path ?? null, roots, process.platform === 'win32');
+      if ('skip' in target) throw new Error(target.skip);
+      const uri = document.uri.with({ path: target.path, query: '', fragment: '' });
+      const stat = await vscode.workspace.fs.stat(uri);
+      if (stat.type !== vscode.FileType.File) throw new Error('not a plain file');
+      if (local) {
+        const real = await realPath(uri.fsPath);
+        if (!realRoots.some((root) => real === root || real.startsWith(root + path.sep))) throw new Error('outside the document folder and the project');
       }
-    }),
-  );
+      if (stat.size > MAX_IMAGE_BYTES || total + stat.size > MAX_TOTAL_IMAGE_BYTES) throw new Error('too large');
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      if (bytes.length > MAX_IMAGE_BYTES || total + bytes.length > MAX_TOTAL_IMAGE_BYTES) throw new Error('too large');
+      if (!looksLikeImage(bytes, target.mime)) throw new Error('not an image');
+      total += bytes.length;
+      images.set(src, `data:${target.mime};base64,${Buffer.from(bytes).toString('base64')}`);
+    } catch {
+      missing.push(src);
+    }
+  }
   return { images, missing: missing.sort() };
 }
 
 async function build(document: vscode.TextDocument, options: { print: boolean; embed: boolean }): Promise<Built> {
   const text = document.getText();
   const { images, missing } = options.embed ? await embedImages(document, text) : { images: new Map<string, string>(), missing: [] };
-  const { html, hasMermaid } = renderDocument(text, {
+  const { html, hasMermaid } = renderer().renderDocument(text, {
     images,
     mermaid: settings(document).get<boolean>('mermaidFromCdn', false),
     fallbackTitle: stemOf(document),
@@ -100,6 +133,41 @@ export async function exportHtml(document: vscode.TextDocument, target?: vscode.
   return target;
 }
 
+/* ---------- temporary files of the PDF export ---------- */
+
+/** Folders made in this session. Each holds one print version, readable by this user only. */
+const tempFolders = new Set<string>();
+
+function removeTempFolder(folder: string): void {
+  tempFolders.delete(folder);
+  try {
+    rmSync(folder, { recursive: true, force: true });
+  } catch {
+    // Still in use; the next sweep takes it.
+  }
+}
+
+/** Removes the print versions of this session. Called when the extension is deactivated. */
+export function removeTempFiles(): void {
+  for (const folder of [...tempFolders]) removeTempFolder(folder);
+}
+
+/** Removes print versions that an earlier session left behind (a browser may still have had them open). */
+function sweepStaleTempFolders(): void {
+  try {
+    const root = os.tmpdir();
+    for (const name of readdirSync(root)) {
+      if (!name.startsWith(TEMP_PREFIX)) continue;
+      const folder = path.join(root, name);
+      if (!tempFolders.has(folder) && Date.now() - statSync(folder).mtimeMs > STALE_MS) rmSync(folder, { recursive: true, force: true });
+    }
+  } catch {
+    // Housekeeping only.
+  }
+}
+
+/* ---------- PDF ---------- */
+
 /** The browser that can print to PDF: the configured one, or the first found at a well-known path. */
 function findBrowser(document: vscode.TextDocument): string | undefined {
   const configured = settings(document).get<string>('browserPath', '').trim();
@@ -109,14 +177,15 @@ function findBrowser(document: vscode.TextDocument): string | undefined {
   return undefined;
 }
 
-async function createPdf(document: vscode.TextDocument, browser: string, htmlFile: string, waitForScripts: boolean): Promise<void> {
+/** Returns true when the PDF was written. */
+async function createPdf(document: vscode.TextDocument, browser: string, htmlFile: string, waitForScripts: boolean, open: Opener): Promise<boolean> {
   const target = await vscode.window.showSaveDialog({
     defaultUri: defaultTarget(document, 'pdf'),
     filters: { PDF: ['pdf'] },
     title: 'Export as PDF',
     saveLabel: 'Export',
   });
-  if (!target) return;
+  if (!target) return true;
   // The browser writes to a temporary file, so the target can be on any file system.
   const pdfFile = htmlFile.replace(/\.html$/, '.pdf');
   try {
@@ -125,47 +194,70 @@ async function createPdf(document: vscode.TextDocument, browser: string, htmlFil
       await vscode.workspace.fs.writeFile(target, await fs.readFile(pdfFile));
     });
   } catch (err) {
+    // For example a browser that does not start, or a target that is open elsewhere or cannot be written.
     const choice = await vscode.window.showErrorMessage(
       `The PDF could not be created: ${err instanceof Error ? err.message : String(err)}`,
       'Open in Browser',
     );
-    if (choice) await vscode.env.openExternal(vscode.Uri.file(htmlFile));
-    return;
+    if (!choice) return true;
+    await open(vscode.Uri.file(htmlFile));
+    return false;
   } finally {
     await fs.rm(pdfFile, { force: true }).catch(() => undefined);
   }
-  const choice = await vscode.window.showInformationMessage(`Exported ${nameOf(target)}.`, 'Open');
-  if (choice) await vscode.env.openExternal(target);
+  void vscode.window.showInformationMessage(`Exported ${nameOf(target)}.`, 'Open').then((choice) => {
+    if (choice) void open(target);
+  });
+  return true;
+}
+
+type Opener = (uri: vscode.Uri) => Thenable<unknown>;
+
+export interface PdfOptions {
+  /** Path of the browser that prints, or null for none. Left out, it is looked for. */
+  browser?: string | null;
+  /** Opens a file in the user's browser. */
+  open?: Opener;
 }
 
 /**
  * Writes a print version of the document to a temporary HTML file. The browser turns it
  * into a PDF: the user's own through Print, or a Chrome, Edge or Chromium found on this machine, headless.
+ * Returns the path of the print version when it was handed to the browser.
  */
-export async function exportPdf(document: vscode.TextDocument): Promise<void> {
+export async function exportPdf(document: vscode.TextDocument, options: PdfOptions = {}): Promise<string | undefined> {
+  const open = options.open ?? ((uri: vscode.Uri) => vscode.env.openExternal(uri));
+  sweepStaleTempFolders();
   // The temporary file is not next to the document, so images are always embedded.
   const { html, missing, hasMermaid } = await build(document, { print: true, embed: true });
-  const dir = path.join(os.tmpdir(), 'seamless-markdown-export');
-  await fs.mkdir(dir, { recursive: true });
-  const htmlFile = path.join(dir, `${stemOf(document).replace(/[^\p{L}\p{N}._ -]/gu, '_')}.html`);
-  await fs.writeFile(htmlFile, html, 'utf8');
+  // A folder of its own that only this user can read: the file holds the whole document.
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), TEMP_PREFIX));
+  tempFolders.add(folder);
+  const htmlFile = path.join(folder, `${stemOf(document).replace(/[^\p{L}\p{N}._ -]/gu, '_')}.html`);
+  await fs.writeFile(htmlFile, html, { encoding: 'utf8', mode: 0o600 });
 
-  const openInBrowser = () => vscode.env.openExternal(vscode.Uri.file(htmlFile));
   const hint = "Use your browser's Print → Save as PDF.";
-  const browser = findBrowser(document);
+  const browser = options.browser === undefined ? findBrowser(document) : options.browser;
   if (!browser) {
-    await openInBrowser();
+    await open(vscode.Uri.file(htmlFile));
     void vscode.window.showInformationMessage(`The print version is open in your browser. ${hint}${missingNote(missing)}`);
-    return;
+    return htmlFile;
   }
   const choice = await vscode.window.showInformationMessage(
     `The print version of ${nameOf(document.uri)} is ready. Open it in your browser and ${hint.replace(/^Use/, 'use')}${missingNote(missing)}`,
     'Open in Browser',
     'Create PDF now',
   );
-  if (choice === 'Open in Browser') await openInBrowser();
-  else if (choice === 'Create PDF now') {
-    const waitForScripts = hasMermaid && settings(document).get<boolean>('mermaidFromCdn', false);
-    await createPdf(document, browser, htmlFile, waitForScripts);
+  if (choice === 'Open in Browser') {
+    await open(vscode.Uri.file(htmlFile));
+    return htmlFile;
   }
+  let finished = true;
+  if (choice === 'Create PDF now') {
+    const waitForScripts = hasMermaid && settings(document).get<boolean>('mermaidFromCdn', false);
+    finished = await createPdf(document, browser, htmlFile, waitForScripts, open);
+  }
+  // Nothing has the print version open, so it does not stay behind.
+  if (finished) removeTempFolder(folder);
+  return finished ? undefined : htmlFile;
 }
