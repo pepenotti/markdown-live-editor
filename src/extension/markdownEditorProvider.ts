@@ -36,6 +36,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     customCss: c.get<string>('customCss', ''),
+    spellCheck: c.get<boolean>('spellCheck', false),
   };
 }
 

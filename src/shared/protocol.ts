@@ -21,6 +21,8 @@ export interface EditorConfig {
   tableAutoAlign: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
+  /** Turn on the browser's spell checking for the text. */
+  spellCheck: boolean;
 }
 
 /**

@@ -638,6 +638,11 @@
           "default": "",
           "scope": "machine",
           "markdownDescription": "Path of the Chrome, Edge or Chromium executable used by **Create PDF now** in **Export as PDF**. Empty looks in the usual places."
+        },
+        "seamlessMarkdown.spellCheck": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the editor's built-in spell checker to check the text and table cells. Whether misspelled words are underlined depends on VS Code and the operating system."
         }
       }
     },

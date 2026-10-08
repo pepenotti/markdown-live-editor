@@ -189,7 +189,7 @@ class TableController {
         cell.className = 'cm-md-cell';
         cell.contentEditable = 'plaintext-only';
         if (cell.contentEditable !== 'plaintext-only') cell.contentEditable = 'true';
-        cell.spellcheck = false;
+        cell.spellcheck = this.view.state.facet(renderConfig).spellCheck;
         cell.dataset.r = String(r);
         cell.dataset.c = String(c);
         cell.setAttribute('role', 'textbox');
