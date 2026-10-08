@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { syntaxTree } from '@codemirror/language';
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
-import { browserCandidates, isCompletePdf, printToPdfArgs } from '../../src/shared/browsers';
+import { browserArgs, browserCandidates, isCompletePdf } from '../../src/shared/browsers';
 import { imageMime, isLocalSource, sourceToPath } from '../../src/shared/embed';
-import { localImageSources, MERMAID_CDN_MAJOR, MERMAID_CDN_URL, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
+import { localImageSources, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
 import { highlight } from '../../src/shared/highlight';
 import { mathPlugin } from '../../src/shared/mathPlugin';
 import { stateOf } from './helpers';
@@ -182,24 +181,13 @@ describe('exported HTML', () => {
     expect(highlight('x', 'sh')).toBeNull();
   });
 
-  it('leaves a Mermaid block as code unless diagrams were asked for', () => {
+  it('exports a Mermaid block as its source when it was not drawn', () => {
     const source = '```mermaid\nflowchart LR\n  A --> B\n```\n';
     const plain = renderDocument(source);
-    expect(plain.hasMermaid).toBe(true);
+    expect(plain).toMatchObject({ diagrams: 1, diagramsDrawn: 0 });
     expect(plain.html).toContain('<pre><code class="language-mermaid">flowchart LR\n  A --&gt; B\n</code></pre>');
     expect(plain.html).not.toContain('<script');
     expect(plain.html).not.toMatch(/https?:\/\/(?!www\.w3\.org)/);
-
-    const drawn = renderDocument(source, { mermaid: true });
-    expect(drawn.html).toContain('<pre class="mermaid">flowchart LR\n  A --&gt; B\n</pre>');
-    expect(drawn.html).toContain(`import mermaid from '${MERMAID_CDN_URL}';`);
-    // No script when there is nothing to draw.
-    expect(renderDocument('# No diagrams', { mermaid: true }).html).not.toContain('<script');
-  });
-
-  it('loads the Mermaid version the editor bundles', () => {
-    const installed = JSON.parse(readFileSync(new URL('../../node_modules/mermaid/package.json', import.meta.url), 'utf8')).version as string;
-    expect(Number(installed.split('.')[0])).toBe(MERMAID_CDN_MAJOR);
   });
 
   it('lists local images and swaps in their replacements', () => {
@@ -284,11 +272,17 @@ describe('finding a browser for PDF', () => {
     expect(browserCandidates('win32', {}, 'C:\\Users\\me')).toEqual([]);
   });
 
-  it('prints headless, without a header, into the given file', () => {
-    const args = printToPdfArgs('file:///tmp/a.html', '/tmp/a b.pdf', '/tmp/profile', false);
-    expect(args).toEqual(expect.arrayContaining(['--headless', '--no-pdf-header-footer', '--print-to-pdf=/tmp/a b.pdf', '--user-data-dir=/tmp/profile']));
-    expect(args.at(-1)).toBe('file:///tmp/a.html');
-    expect(args.some((a) => a.startsWith('--virtual-time-budget'))).toBe(false);
-    expect(printToPdfArgs('file:///tmp/a.html', '/tmp/a.pdf', '/tmp/p', true).some((a) => a.startsWith('--virtual-time-budget'))).toBe(true);
+  it('knows where Brave is too', () => {
+    expect(browserCandidates('darwin', {}, '/Users/me')).toContain('/Applications/Brave Browser.app/Contents/MacOS/Brave Browser');
+    expect(browserCandidates('linux', {}, '/home/me')).toContain('/usr/bin/brave-browser');
+    expect(browserCandidates('win32', { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local' }, '')).toContain('C:\\Users\\me\\AppData\\Local\\BraveSoftware\\Brave-Browser\\Application\\brave.exe');
+  });
+
+  it('starts the browser headless on the DevTools pipe with fixed arguments', () => {
+    const args = browserArgs('/tmp/pro file');
+    expect(args).toEqual(expect.arrayContaining(['--headless', '--remote-debugging-pipe', '--user-data-dir=/tmp/pro file']));
+    // No port is opened, the sandbox stays on, and the only page named is a blank one.
+    expect(args.some((a) => /remote-debugging-port|no-sandbox|disable-web-security/.test(a))).toBe(false);
+    expect(args.filter((a) => !a.startsWith('--'))).toEqual(['about:blank']);
   });
 });

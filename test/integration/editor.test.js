@@ -31,6 +31,20 @@ async function open(name) {
   return { uri, document };
 }
 
+/**
+ * Runs an export command the way a user does: the command asks where to save, and the
+ * dialog is answered with `target`. `source` is what the Explorer passes, when given.
+ */
+function exportTo(command, target, ...source) {
+  api.answerSaveDialog(target);
+  return vscode.commands.executeCommand(command, ...source);
+}
+
+const isPdf = (file) => {
+  const bytes = fs.readFileSync(file);
+  return bytes.subarray(0, 5).toString('latin1') === '%PDF-' && bytes.subarray(-1024).toString('latin1').includes('%%EOF');
+};
+
 /** Waits until the webview holds exactly the document's text and returns its state. */
 async function inStep(uri, document) {
   return until(async () => {
@@ -449,7 +463,7 @@ suite('Seamless Markdown', () => {
   test('exports a self-contained HTML file', async () => {
     const { uri } = await open('features.md');
     const target = vscode.Uri.file(path.join(dir, 'features-export.html'));
-    const written = await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    const written = await exportTo('seamlessMarkdown.exportHtml', target);
     assert.strictEqual(written && written.toString(), target.toString());
     const html = fs.readFileSync(target.fsPath, 'utf8');
     assert.ok(html.startsWith('<!DOCTYPE html>'), 'a complete document');
@@ -465,7 +479,7 @@ suite('Seamless Markdown', () => {
     const settings = vscode.workspace.getConfiguration('seamlessMarkdown.export');
     try {
       await settings.update('embedImages', false, vscode.ConfigurationTarget.Global);
-      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      await exportTo('seamlessMarkdown.exportHtml', target);
       const linked = fs.readFileSync(target.fsPath, 'utf8');
       assert.ok(linked.includes('<img src="assets/diagram.svg" alt="The pipeline">'), 'images keep their relative paths');
       assert.ok(!linked.includes('src="data:'), 'nothing is embedded');
@@ -499,7 +513,7 @@ suite('Seamless Markdown', () => {
     try {
       await open('embed.md');
       const target = vscode.Uri.file(path.join(dir, 'embed-export.html'));
-      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      await exportTo('seamlessMarkdown.exportHtml', target);
       const html = fs.readFileSync(target.fsPath, 'utf8');
       assert.strictEqual((html.match(/src="data:/g) || []).length, 1, 'only the real image is embedded');
       assert.ok(/<img src="data:image\/png;base64,[A-Za-z0-9+/=]+" alt="real">/.test(html));
@@ -521,7 +535,7 @@ suite('Seamless Markdown', () => {
   test('exports footnotes and alerts, and blocks scripts from the document', async () => {
     await open('footnotes.md');
     const target = vscode.Uri.file(path.join(dir, 'footnotes-export.html'));
-    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    await exportTo('seamlessMarkdown.exportHtml', target);
     const html = fs.readFileSync(target.fsPath, 'utf8');
     assert.ok(html.includes('first used<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup>'), 'first reference is note 1');
     assert.ok(html.includes('called<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup>'), 'second note is note 2');
@@ -533,7 +547,7 @@ suite('Seamless Markdown', () => {
 
     await open('features.md');
     const features = vscode.Uri.file(path.join(dir, 'features-alerts.html'));
-    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', features);
+    await exportTo('seamlessMarkdown.exportHtml', features);
     const alerts = fs.readFileSync(features.fsPath, 'utf8');
     assert.ok(alerts.includes('<blockquote class="alert alert-note">\n<p><strong class="alert-title">Note</strong><br>'), 'a note callout');
     assert.ok(alerts.includes('<blockquote class="alert alert-warning">'), 'a warning callout');
@@ -547,55 +561,236 @@ suite('Seamless Markdown', () => {
     fs.chmodSync(locked, 0o555);
     try {
       const target = vscode.Uri.file(path.join(locked, 'out.html'));
-      const written = await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      const written = await exportTo('seamlessMarkdown.exportHtml', target);
       assert.strictEqual(written, undefined, 'the command reports no file');
       assert.ok(!fs.existsSync(target.fsPath));
+      const errors = api.shown().filter((entry) => entry.kind === 'error');
+      assert.strictEqual(errors.length, 1, 'the user is told');
+      assert.match(errors[0].text, /^The HTML export failed: /);
     } finally {
       fs.chmodSync(locked, 0o755);
     }
   });
 
-  test('the PDF export without a printing browser hands a print version to the default browser', async () => {
-    const { uri } = await open('features.md');
-    const { file, opened } = await api.exportPdfWithoutBrowser(uri);
-    assert.ok(file, 'a print version was written');
-    assert.deepStrictEqual(opened, [file], 'exactly that file is opened');
-    assert.strictEqual(path.basename(file), 'features.html');
-    assert.ok(path.basename(path.dirname(file)).startsWith('seamless-markdown-export-'), 'in a temporary folder of its own');
-    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(path.dirname(file)).mode & 0o077, 0, 'that only this user can read');
-    const html = fs.readFileSync(file, 'utf8');
-    assert.ok(html.includes('<title>Seamless Markdown</title>'));
-    assert.ok(html.includes('@page{margin:'), 'page margins');
-    assert.ok(html.includes('break-after:avoid'), 'page-break rules');
-    assert.ok(!html.includes('prefers-color-scheme'), 'no dark variant');
-    assert.ok(/<img src="data:image\/png;base64,/.test(html), 'images are embedded whatever the setting says');
-    // A second export gets a folder of its own, so two documents with one name do not collide.
-    const again = await api.exportPdfWithoutBrowser(uri);
-    assert.notStrictEqual(again.file, file);
+  /* ---------- export: reachable from anywhere, and never silent ---------- */
+
+  const exported = () => api.shown().filter((entry) => entry.kind === 'info' && entry.text.startsWith('Exported '));
+  const exportFolders = () => fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith('seamless-markdown-export-') || name.startsWith('seamless-markdown-profile-'));
+
+  test('exports HTML from the plain text editor, with no editor of ours open', async () => {
+    const uri = vscode.Uri.file(path.join(dir, 'features.md'));
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    assert.strictEqual(api.sessionCount(uri), 0, 'the file is in the text editor only');
+    const target = vscode.Uri.file(path.join(dir, 'from-text-editor.html'));
+    const written = await exportTo('seamlessMarkdown.exportHtml', target);
+    assert.strictEqual(written && written.toString(), target.toString());
+    assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('<title>Seamless Markdown</title>'));
+    // The dialog started next to the document, and the user is told where the file went.
+    const shown = api.shown();
+    assert.deepStrictEqual(shown.filter((e) => e.kind === 'save').map((e) => [path.basename(e.text), e.actions]), [['features.html', ['HTML']]]);
+    assert.strictEqual(exported().length, 1);
+    assert.strictEqual(exported()[0].text.split('.')[0], 'Exported from-text-editor');
+    assert.strictEqual(exported()[0].actions[0], 'Open');
+    assert.match(exported()[0].actions[1], /^(Reveal in Finder|Reveal in File Explorer|Open Containing Folder)$/);
   });
 
-  test('exports math as MathML and, by default, a diagram as its source', async () => {
+  test('exports the file the Explorer hands over, with no editor open at all', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const uri = vscode.Uri.file(path.join(dir, 'notes', 'other.md'));
+    const target = vscode.Uri.file(path.join(dir, 'from-explorer.html'));
+    // The Explorer passes the clicked file and the whole selection.
+    const written = await exportTo('seamlessMarkdown.exportHtml', target, uri, [uri]);
+    assert.strictEqual(written && written.toString(), target.toString());
+    assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('<h1 id="other-note">Other note</h1>'));
+    assert.strictEqual(path.basename(api.shown().find((e) => e.kind === 'save').text), 'other.html');
+    // It wins over the editor that happens to be active.
+    await open('plain.md');
+    await exportTo('seamlessMarkdown.exportHtml', target, uri);
+    assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('Other note'));
+  });
+
+  test('says so when there is no Markdown file to export or copy, and throws nothing', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const target = vscode.Uri.file(path.join(dir, 'nothing.html'));
+    const text = path.join(dir, 'plain.txt');
+    fs.writeFileSync(text, 'not Markdown\n');
+    for (const withTextFile of [false, true]) {
+      if (withTextFile) await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(text)));
+      for (const command of ['exportHtml', 'exportPdf', 'copyAsHtml']) {
+        api.answerSaveDialog(target);
+        const result = await vscode.commands.executeCommand(`seamlessMarkdown.${command}`);
+        assert.strictEqual(result, undefined, command);
+        const shown = api.shown();
+        assert.deepStrictEqual(shown.map((e) => e.kind), ['info'], `${command}: one message and no dialog`);
+        assert.match(shown[0].text, /^Open a Markdown file first/);
+      }
+    }
+    assert.ok(!fs.existsSync(target.fsPath));
+    // A file that does not exist is reported too.
+    api.answerSaveDialog(target);
+    assert.strictEqual(await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', vscode.Uri.file(path.join(dir, 'gone.md'))), undefined);
+    assert.deepStrictEqual(api.shown().map((e) => e.kind), ['error']);
+    assert.match(api.shown()[0].text, /^The file could not be opened: /);
+  });
+
+  test('writes nothing when the save dialog is cancelled', async () => {
+    await open('plain.md');
+    for (const command of ['seamlessMarkdown.exportHtml', 'seamlessMarkdown.exportPdf']) {
+      assert.strictEqual(await exportTo(command, undefined), undefined);
+      assert.ok(api.shown().every((e) => e.kind === 'save' || (command.endsWith('Pdf') && e.kind === 'error')), JSON.stringify(api.shown()));
+    }
+  });
+
+  test('includes typing the editor has not sent yet', async () => {
+    fs.writeFileSync(path.join(dir, 'typing.md'), 'Start.\n');
+    const { uri, document } = await open('typing.md');
+    await inStep(uri, document);
+    await api.post(uri, { type: 'debugType', text: 'Typed a moment ago. ' });
+    assert.strictEqual(document.getText(), 'Start.\n', 'the typing has not arrived yet');
+    const target = vscode.Uri.file(path.join(dir, 'typing.html'));
+    // Also when the command is told which file, as from the Explorer.
+    await exportTo('seamlessMarkdown.exportHtml', target, uri);
+    assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('<p>Typed a moment ago. Start.</p>'));
+  });
+
+  test('the Export menu of the toolbar exports and copies', async () => {
+    const { uri } = await open('plain.md');
+    const target = vscode.Uri.file(path.join(dir, 'from-toolbar.html'));
+    api.answerSaveDialog(target);
+    await api.fromWebview(uri, { type: 'export', action: 'html' });
+    await until(() => exported().length === 1, 'the export to finish');
+    assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('<p>First line</p>'));
+
+    await vscode.env.clipboard.writeText('');
+    await api.fromWebview(uri, { type: 'export', action: 'copyHtml' });
+    assert.strictEqual(await until(() => vscode.env.clipboard.readText(), 'the clipboard to be filled'), '<p>First line</p>\n<p>Second paragraph with a word.</p>\n');
+
+    // Anything else the page might send is ignored.
+    api.resetUi();
+    await api.fromWebview(uri, { type: 'export', action: 'rm -rf' });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.deepStrictEqual(api.shown(), []);
+    // The editor was told whether a PDF can be made here.
+    const browser = api.exportBrowser();
+    assert.strictEqual(typeof (browser.path || browser.reason), 'string');
+  });
+
+  test('copies as HTML from the plain text editor', async () => {
+    const uri = vscode.Uri.file(path.join(dir, 'plain.md'));
+    const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    await vscode.env.clipboard.writeText('');
+    await vscode.commands.executeCommand('seamlessMarkdown.copyAsHtml');
+    assert.strictEqual(await until(() => vscode.env.clipboard.readText(), 'the clipboard to be filled'), '<p>First line</p>\n<p>Second paragraph with a word.</p>\n');
+    editor.selection = new vscode.Selection(0, 0, 0, 5);
+    await vscode.commands.executeCommand('seamlessMarkdown.copyAsHtml');
+    await until(async () => (await vscode.env.clipboard.readText()) === '<p>First</p>\n', 'the selection to be copied');
+  });
+
+  /* ---------- export: diagrams, math and PDF with a real browser ---------- */
+
+  /** Skips, saying why, on a machine without a browser the export can use. */
+  function needsBrowser(test) {
+    const browser = api.exportBrowser();
+    if (browser.path) return browser.path;
+    console.log(`      SKIPPED: no Chrome, Edge, Chromium or Brave on this machine (${browser.reason})`);
+    test.skip();
+  }
+
+  test('draws diagrams into the exported HTML as static SVG, with math laid out by KaTeX', async function () {
+    needsBrowser(this);
+    this.timeout(120000);
+    const before = exportFolders();
     await open('diagrams.md');
     const target = vscode.Uri.file(path.join(dir, 'diagrams-export.html'));
-    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    await exportTo('seamlessMarkdown.exportHtml', target);
     const html = fs.readFileSync(target.fsPath, 'utf8');
-    assert.strictEqual((html.match(/<math /g) || []).length, 3, 'three formulas');
-    assert.ok(html.includes('<div class="math-block"><span class="katex"><math '), 'block math');
+    assert.strictEqual((html.match(/<figure class="diagram"><svg /g) || []).length, 1, 'the diagram is drawn');
+    assert.ok(html.includes('Half preview') && html.includes('Markdown file'), 'with its labels');
+    assert.ok(!html.includes('language-mermaid') && !html.includes('flowchart LR'), 'its source is gone');
+    assert.ok(!/<script/i.test(html), 'and no script is left');
+    assert.strictEqual((html.match(/class="katex-html"/g) || []).length, 3, 'three formulas');
+    assert.ok(html.includes('<div class="math-block"><span class="katex-display">'), 'block math');
+    assert.ok(/@font-face\{[^}]*KaTeX_Main;[^}]*src:url\(data:font\/woff2;base64,/.test(html), 'the math font is embedded');
+    // A drawing refers to its own markers with url(#…); nothing else may be a URL.
+    assert.ok(!/url\((?!["']?(?:data:|#))/.test(html), 'and nothing is loaded from a file or the network');
     assert.ok(html.includes('a price like $5 or $10 stays a price'), 'prices are not math');
-    assert.ok(html.includes('<pre><code class="language-mermaid">flowchart LR'), 'the diagram is a code block');
-    assert.ok(!html.includes('<script'), 'no script without the CDN setting');
+    assert.match(exported()[0].text, /^Exported diagrams-export\.html\.$/, 'nothing to add when everything was drawn');
+    assert.deepStrictEqual(exportFolders(), before, 'no temporary folder or browser profile is left');
+  });
 
+  test('exports a PDF in one step, printed from the same HTML with the diagram drawn', async function () {
+    needsBrowser(this);
+    this.timeout(120000);
+    const before = exportFolders();
+    // From the plain text editor: no editor of ours is involved.
+    const uri = vscode.Uri.file(path.join(dir, 'diagrams.md'));
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+    const target = vscode.Uri.file(path.join(dir, 'diagrams-export.pdf'));
+    const written = await exportTo('seamlessMarkdown.exportPdf', target);
+    assert.strictEqual(written && written.toString(), target.toString());
+    assert.ok(isPdf(target.fsPath), 'a complete PDF');
+    assert.ok(fs.statSync(target.fsPath).size > 10000, 'with content');
+    const shown = api.shown();
+    assert.deepStrictEqual(shown.map((e) => e.kind), ['save', 'progress', 'info'], 'dialog, progress, done: nothing else');
+    assert.deepStrictEqual([path.basename(shown[0].text), shown[0].actions], ['diagrams.pdf', ['PDF']]);
+    assert.strictEqual(shown[1].text, 'Creating diagrams-export.pdf…');
+    assert.strictEqual(shown[2].text, 'Exported diagrams-export.pdf.');
+    // What was printed.
+    const html = api.lastExportHtml();
+    assert.strictEqual((html.match(/<figure class="diagram"><svg /g) || []).length, 1, 'the diagram is in the printed page');
+    assert.ok(!/<script/i.test(html), 'no script');
+    assert.ok(html.includes('@page{margin:') && !html.includes('prefers-color-scheme'), 'the print style sheet');
+    assert.strictEqual((html.match(/class="katex-html"/g) || []).length, 3);
+    assert.deepStrictEqual(exportFolders(), before, 'no temporary folder or browser profile is left');
+  });
+
+  test('exports a PDF of the file the Explorer hands over, images included', async function () {
+    needsBrowser(this);
+    this.timeout(120000);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     const settings = vscode.workspace.getConfiguration('seamlessMarkdown.export');
     try {
-      await settings.update('mermaidFromCdn', true, vscode.ConfigurationTarget.Global);
-      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
-      const drawn = fs.readFileSync(target.fsPath, 'utf8');
-      assert.ok(drawn.includes('<pre class="mermaid">flowchart LR'), 'the diagram is left for Mermaid to draw');
-      const script = /<script type="module" nonce="([0-9a-f]+)">\s*import mermaid from '(https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@\d+\/)/.exec(drawn);
-      assert.ok(script, 'Mermaid comes from the CDN');
-      assert.ok(drawn.includes(`script-src 'nonce-${script[1]}' ${script[2]}"`), 'and is the only script the policy allows');
+      // A PDF has its images whatever the setting for HTML says.
+      await settings.update('embedImages', false, vscode.ConfigurationTarget.Global);
+      const target = vscode.Uri.file(path.join(dir, 'features-export.pdf'));
+      await exportTo('seamlessMarkdown.exportPdf', target, vscode.Uri.file(path.join(dir, 'features.md')));
+      assert.ok(isPdf(target.fsPath));
+      assert.ok(fs.statSync(target.fsPath).size > 50000, 'large enough to hold the images');
+      assert.ok(/<img src="data:image\/png;base64,/.test(api.lastExportHtml()));
+      assert.match(exported()[0].text, /^Exported features-export\.pdf\. 1 image was not embedded \(assets\/nope\.png\)\.$/);
     } finally {
-      await settings.update('mermaidFromCdn', undefined, vscode.ConfigurationTarget.Global);
+      await settings.update('embedImages', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test('without a browser PDF export is not offered, says why when run, and HTML keeps diagrams as source', async function () {
+    this.timeout(120000);
+    const settings = vscode.workspace.getConfiguration('seamlessMarkdown.export');
+    const had = api.exportBrowser().path;
+    try {
+      await settings.update('browserPath', path.join(dir, 'no-such-browser'), vscode.ConfigurationTarget.Global);
+      await until(() => !api.exportBrowser().path, 'the missing browser to be noticed');
+      assert.match(api.exportBrowser().reason, /browserPath does not exist/);
+
+      await open('diagrams.md');
+      const pdf = vscode.Uri.file(path.join(dir, 'never.pdf'));
+      assert.strictEqual(await exportTo('seamlessMarkdown.exportPdf', pdf), undefined);
+      const shown = api.shown();
+      assert.deepStrictEqual(shown.map((e) => e.kind), ['error'], 'an error and no save dialog');
+      assert.match(shown[0].text, /^Export as PDF needs a Chromium-based browser \(Chrome, Edge, Chromium or Brave\)/);
+      assert.deepStrictEqual(shown[0].actions, ['Open Setting']);
+      assert.ok(!fs.existsSync(pdf.fsPath));
+
+      const target = vscode.Uri.file(path.join(dir, 'diagrams-source.html'));
+      await exportTo('seamlessMarkdown.exportHtml', target);
+      const html = fs.readFileSync(target.fsPath, 'utf8');
+      assert.ok(html.includes('<pre><code class="language-mermaid">flowchart LR'), 'the diagram is a code block');
+      assert.ok(!html.includes('<figure class="diagram">') && !/<script/i.test(html));
+      assert.strictEqual((html.match(/class="katex-html"/g) || []).length, 3, 'math needs no browser');
+      assert.strictEqual(exported()[0].text, 'Exported diagrams-source.html. Its diagram was exported as source code: drawing diagrams needs Chrome, Edge, Chromium or Brave.');
+    } finally {
+      await settings.update('browserPath', undefined, vscode.ConfigurationTarget.Global);
+      await until(() => api.exportBrowser().path === had, 'the browser to be found again');
     }
   });
 
@@ -768,7 +963,7 @@ suite('Seamless Markdown', () => {
     // And they are exported as they are written.
     const target = vscode.Uri.file(path.join(dir, 'wiki-off.html'));
     await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
-    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    await exportTo('seamlessMarkdown.exportHtml', target);
     assert.ok(fs.readFileSync(target.fsPath, 'utf8').includes('<p>See [[Target]] and [[target#Second part|part two]].</p>'));
   });
 
@@ -836,7 +1031,7 @@ suite('Seamless Markdown', () => {
     test('exports a wiki link as a link to the exported note, and a missing one as text', async () => {
       const { uri } = await open('wiki/Home.md');
       const target = vscode.Uri.file(path.join(dir, 'wiki-on.html'));
-      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      await exportTo('seamlessMarkdown.exportHtml', target);
       const html = fs.readFileSync(target.fsPath, 'utf8');
       assert.ok(html.includes('<p>See <a href="Target.html" class="wikilink">Target</a> and <a href="Target.html#second-part" class="wikilink">part two</a>.</p>'), html);
       assert.ok(html.includes('<p>Nothing yet: Missing Note.</p>'), html);

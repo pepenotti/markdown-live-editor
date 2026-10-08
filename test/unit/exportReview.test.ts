@@ -1,13 +1,9 @@
 // Export: footnotes, alerts, anchors shared with the table of contents, and the rules that
 // keep an exported file safe (what may be embedded, what may load, how the browser is run).
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
-import { afterAll, describe, expect, it } from 'vitest';
-import { printToPdf } from '../../src/extension/pdf';
+import { describe, expect, it } from 'vitest';
 import { imageTarget, isInside, isLocalSource, looksLikeImage, normalizePath } from '../../src/shared/embed';
-import { contentSecurityPolicy, localImageSources, MERMAID_CDN_BASE, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
+import { contentSecurityPolicy, localImageSources, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
 import { markdownParser } from '../../src/shared/markdownSyntax';
 import { headingSlugs } from '../../src/shared/textUtil';
 import { tocBlock } from '../../src/shared/toc';
@@ -193,22 +189,6 @@ describe('what an exported file may load', () => {
     expect(doc.indexOf('Content-Security-Policy')).toBeLessThan(doc.indexOf('<title>'));
     expect(doc.indexOf('Content-Security-Policy')).toBeLessThan(doc.indexOf('evil.example'));
   });
-
-  it('with Mermaid from the CDN allows only its own script and that one folder', () => {
-    const { html: doc } = renderDocument(hostile, { mermaid: true, nonce: 'abc123' });
-    const csp = /Content-Security-Policy" content="([^"]*)"/.exec(doc)![1];
-    expect(csp).toContain(`script-src 'nonce-abc123' ${MERMAID_CDN_BASE}`);
-    expect(csp).not.toContain('unsafe-eval');
-    expect(csp.match(/https?:\/\/\S+/g)).toEqual([MERMAID_CDN_BASE]);
-    expect(doc).toContain('<script type="module" nonce="abc123">');
-    expect(doc.match(/nonce="abc123"/g)).toHaveLength(1);
-    // A fresh value every time, and never one that can break out of the attribute.
-    const a = /nonce="([^"]+)"/.exec(renderDocument(hostile, { mermaid: true }).html)![1];
-    const b = /nonce="([^"]+)"/.exec(renderDocument(hostile, { mermaid: true }).html)![1];
-    expect(a).toMatch(/^[0-9a-f]{36}$/);
-    expect(a).not.toBe(b);
-    expect(renderDocument(hostile, { mermaid: true, nonce: `x" 'unsafe-inline' <y>` }).html).toContain(`'nonce-xunsafe-inliney'`);
-  });
 });
 
 describe('which images may be embedded', () => {
@@ -293,89 +273,5 @@ describe('Copy as HTML', () => {
       '<!-- a comment -->\n\ntext\n',
     ];
     for (const doc of docs) expect(html(doc), doc).toBe(plain.render(doc));
-  });
-});
-
-describe('the headless browser', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'sm-fake-browser-'));
-  afterAll(() => rmSync(folder, { recursive: true, force: true }));
-  const PDF = '%PDF-1.4\n1 0 obj\n<<>>\nendobj\n';
-  const END = 'trailer\n<<>>\nstartxref\n9\n%%EOF\n';
-
-  /** A stand-in browser: a script that gets the real arguments and behaves as told. */
-  function fakeBrowser(name: string, body: string): string {
-    const file = join(folder, name);
-    writeFileSync(
-      file,
-      `#!${process.execPath}
-const fs = require('node:fs');
-const out = process.argv.find((a) => a.startsWith('--print-to-pdf=')).slice('--print-to-pdf='.length);
-fs.writeFileSync(out + '.pid', String(process.pid));
-fs.writeFileSync(out + '.args', JSON.stringify(process.argv.slice(2)));
-${body}
-`,
-    );
-    chmodSync(file, 0o755);
-    return file;
-  }
-  const alive = (pid: number) => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const pidOf = (pdf: string) => Number(readFileSync(pdf + '.pid', 'utf8'));
-  const page = join(folder, 'page with spaces & --flag=like name.html');
-  writeFileSync(page, '<p>x</p>');
-  const unix = process.platform === 'win32' ? it.skip : it;
-
-  unix('takes the PDF of a browser that exits', async () => {
-    const pdf = join(folder, 'ok.pdf');
-    await printToPdf(fakeBrowser('ok', `fs.writeFileSync(out, ${JSON.stringify(PDF + END)});`), page, pdf, false, 5000);
-    expect(readFileSync(pdf, 'utf8')).toBe(PDF + END);
-    // Each path reaches the browser as one argument, and the page as a URL, so none can be read as an option.
-    const args = JSON.parse(readFileSync(pdf + '.args', 'utf8')) as string[];
-    expect(args.at(-1)).toMatch(/^file:\/\/\/.*page%20with%20spaces%20&%20--flag=like%20name\.html$/);
-    expect(args.filter((a) => a.startsWith('--print-to-pdf='))).toEqual([`--print-to-pdf=${pdf}`]);
-    expect(args.filter((a) => !a.startsWith('--'))).toHaveLength(1);
-    expect(existsSync(args.find((a) => a.startsWith('--user-data-dir='))!.slice('--user-data-dir='.length))).toBe(false);
-  });
-
-  unix('waits for a file that is written in pieces, then stops a browser that never exits', async () => {
-    const pdf = join(folder, 'slow.pdf');
-    const more = '2 0 obj\n<<>>\nendobj\n';
-    const browser = fakeBrowser(
-      'slow',
-      `fs.writeFileSync(out, ${JSON.stringify(PDF)});
-setTimeout(() => fs.appendFileSync(out, ${JSON.stringify(END)}), 400);
-setTimeout(() => fs.appendFileSync(out, ${JSON.stringify(more + END)}), 550);
-setInterval(() => {}, 1000);`,
-    );
-    await printToPdf(browser, page, pdf, false, 10000);
-    // Not the first version that happened to end like a PDF, but the finished file.
-    expect(readFileSync(pdf, 'utf8')).toBe(PDF + END + more + END);
-    expect(alive(pidOf(pdf))).toBe(false);
-  });
-
-  unix('stops a browser that writes nothing and reports it', async () => {
-    const pdf = join(folder, 'hang.pdf');
-    await expect(printToPdf(fakeBrowser('hang', 'setInterval(() => {}, 1000);'), page, pdf, false, 800)).rejects.toThrow('did not finish in time');
-    expect(alive(pidOf(pdf))).toBe(false);
-    expect(existsSync(pdf)).toBe(false);
-  });
-
-  unix('reports a browser that fails or writes something that is not a PDF', async () => {
-    await expect(printToPdf(fakeBrowser('fail', 'console.error("boom: no display"); process.exit(3);'), page, join(folder, 'fail.pdf'), false, 5000)).rejects.toThrow('boom: no display');
-    await expect(printToPdf(fakeBrowser('junk', 'fs.writeFileSync(out, "<html>");'), page, join(folder, 'junk.pdf'), false, 5000)).rejects.toThrow('did not write a PDF');
-    await expect(printToPdf(join(folder, 'no-such-browser'), page, join(folder, 'none.pdf'), false, 5000)).rejects.toThrow();
-  });
-
-  unix('replaces an older PDF instead of taking it for the new one', async () => {
-    const pdf = join(folder, 'old.pdf');
-    writeFileSync(pdf, PDF + 'old\n' + END);
-    await expect(printToPdf(fakeBrowser('old', 'setInterval(() => {}, 1000);'), page, pdf, false, 800)).rejects.toThrow('did not finish in time');
-    expect(existsSync(pdf)).toBe(false);
   });
 });

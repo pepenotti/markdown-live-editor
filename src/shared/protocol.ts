@@ -32,7 +32,15 @@ export interface EditorConfig {
   checkLinks: boolean;
   /** Treat `[[Note]]` as a link to another note. Off by default: it is not standard Markdown. */
   wikiLinks: boolean;
+  /** Whether a browser that can print is installed, so **Export as PDF** can be offered. */
+  canExportPdf: boolean;
+  /** Shown next to the PDF entry of the Export menu while it is not available. */
+  exportPdfHint: string;
 }
+
+/** What the Export menu of the toolbar asks the host to do. */
+export type ExportAction = 'html' | 'pdf' | 'copyHtml';
+export const EXPORT_ACTIONS: readonly ExportAction[] = ['html', 'pdf', 'copyHtml'];
 
 /**
  * One replaced range. Every position refers to the document as it was before the
@@ -151,6 +159,7 @@ export type WebviewMessage =
   | { type: 'stats'; words: number; chars: number; selWords: number }
   | { type: 'openLink'; href: string }
   | { type: 'openWikiLink'; target: string; heading: string }
+  | { type: 'export'; action: ExportAction }
   | { type: 'request'; reqId: number; kind: RequestKind; payload?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'selectionState'; reqId: number; text: string }

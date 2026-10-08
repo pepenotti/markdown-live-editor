@@ -1,5 +1,5 @@
-// The toolbar above the editor: formatting buttons on the left, mode switch on the right.
-import { MODE_LABELS, MODES, type CommandId, type Mode } from '../../shared/protocol';
+// The toolbar above the editor: formatting buttons on the left, then Export and the mode switch on the right.
+import { MODE_LABELS, MODES, type CommandId, type ExportAction, type Mode } from '../../shared/protocol';
 
 const svg = (body: string) =>
   `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -18,6 +18,8 @@ const ICONS = {
   image: svg('<rect x="1.500" y="2.500" width="13" height="11" rx="1.500"/><circle cx="5.200" cy="6" r="1.100"/><path d="m2 12 3.500-3.500 2.500 2.500 2-2 4 3.500"/>'),
   table: svg('<rect x="1.500" y="2.500" width="13" height="11" rx="1.500"/><path d="M1.500 6.500h13M1.500 10h13M6 2.500v11M10.500 2.500v11"/>'),
   rule: svg('<path d="M2 8h12"/><path d="M4 4.500h8M4 11.500h8" opacity=".35"/>'),
+  export: svg('<path d="M8 10V2.500M5 5.500l3-3 3 3M3 9.500v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/>'),
+  caret: svg('<path d="m5 6.500 3 3 3-3"/>'),
 };
 
 interface ButtonSpec {
@@ -55,9 +57,17 @@ export interface Toolbar {
   setMode(mode: Mode): void;
   setHeading(level: number): void;
   setVisible(visible: boolean): void;
+  /** Whether a PDF can be made here, and the reason shown when it cannot. */
+  setExport(canPdf: boolean, hint: string): void;
 }
 
-export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac: boolean): Toolbar {
+const EXPORT_ITEMS: { action: ExportAction; label: string }[] = [
+  { action: 'html', label: 'Export as HTML…' },
+  { action: 'pdf', label: 'Export as PDF…' },
+  { action: 'copyHtml', label: 'Copy as HTML' },
+];
+
+export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac: boolean, onExport: (action: ExportAction) => void = () => {}): Toolbar {
   const dom = document.createElement('div');
   dom.className = 'mdl-toolbar';
   dom.setAttribute('role', 'toolbar');
@@ -104,6 +114,87 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
   }
   dom.append(left);
 
+  /* ---------- export menu ---------- */
+  const exportButton = document.createElement('button');
+  exportButton.type = 'button';
+  exportButton.className = 'mdl-export';
+  exportButton.innerHTML = `${ICONS.export}<span>Export</span>${ICONS.caret}`;
+  exportButton.title = 'Export this document';
+  exportButton.setAttribute('aria-haspopup', 'menu');
+  exportButton.setAttribute('aria-expanded', 'false');
+  // The toolbar scrolls sideways when it is narrow, which would clip a menu inside it,
+  // so the menu lives in the page and is placed under the button.
+  const menu = document.createElement('div');
+  menu.className = 'mdl-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Export');
+  menu.hidden = true;
+  const items = new Map<ExportAction, HTMLButtonElement>();
+  const pdfHint = document.createElement('small');
+  for (const { action, label } of EXPORT_ITEMS) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.dataset.action = action;
+    const text = document.createElement('span');
+    text.textContent = label;
+    item.append(text);
+    if (action === 'pdf') item.append(pdfHint);
+    item.addEventListener('mousedown', (e) => e.preventDefault());
+    item.addEventListener('click', () => {
+      if (item.getAttribute('aria-disabled') === 'true') return;
+      closeMenu();
+      onExport(action);
+    });
+    items.set(action, item);
+    menu.append(item);
+  }
+  const enabledItems = () => [...items.values()].filter((item) => item.getAttribute('aria-disabled') !== 'true');
+  const outside = (e: Event) => {
+    if (!menu.contains(e.target as Node) && !exportButton.contains(e.target as Node)) closeMenu();
+  };
+  function closeMenu(): void {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    menu.remove();
+    exportButton.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', outside, true);
+    window.removeEventListener('blur', closeMenu);
+    window.removeEventListener('resize', closeMenu);
+  }
+  function openMenu(focusFirst: boolean): void {
+    const box = exportButton.getBoundingClientRect();
+    document.body.append(menu);
+    menu.hidden = false;
+    menu.style.top = `${Math.round(box.bottom + 4)}px`;
+    menu.style.right = `${Math.max(8, Math.round(document.documentElement.clientWidth - box.right))}px`;
+    exportButton.setAttribute('aria-expanded', 'true');
+    document.addEventListener('mousedown', outside, true);
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    if (focusFirst) enabledItems()[0]?.focus();
+  }
+  exportButton.addEventListener('mousedown', (e) => e.preventDefault());
+  exportButton.addEventListener('click', () => (menu.hidden ? openMenu(false) : closeMenu()));
+  exportButton.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    if (menu.hidden) openMenu(true);
+    else enabledItems()[0]?.focus();
+  });
+  menu.addEventListener('keydown', (e) => {
+    const list = enabledItems();
+    const at = list.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Escape') {
+      closeMenu();
+      exportButton.focus();
+    } else if (e.key === 'ArrowDown') list[(at + 1) % list.length]?.focus();
+    else if (e.key === 'ArrowUp') list[(at - 1 + list.length) % list.length]?.focus();
+    else return;
+    e.preventDefault();
+  });
+  dom.append(exportButton);
+
   const modes = document.createElement('div');
   modes.className = 'mdl-modes';
   modes.setAttribute('role', 'group');
@@ -135,6 +226,14 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
     },
     setVisible(visible) {
       dom.hidden = !visible;
+      if (!visible) closeMenu();
+    },
+    setExport(canPdf, hint) {
+      const pdf = items.get('pdf')!;
+      pdf.setAttribute('aria-disabled', String(!canPdf));
+      pdf.title = canPdf ? '' : hint;
+      pdfHint.textContent = canPdf ? '' : hint;
+      pdfHint.hidden = canPdf;
     },
   };
 }

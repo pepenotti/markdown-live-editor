@@ -69,7 +69,9 @@ jobs:
       - run: npm run build
       - name: Integration tests in VS Code
         run: xvfb-run -a npx vscode-test
-      - run: npm run package
+      # Builds the .vsix that is released below and tests exactly those files, unpacked like an installation.
+      - name: Package, then integration tests against the packaged extension
+        run: xvfb-run -a npm run test:vsix
       - name: Release notes from the changelog
         run: node scripts/changelog-section.mjs "$VERSION" > release-notes.md
       - name: Create the GitHub release

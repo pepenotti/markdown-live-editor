@@ -128,6 +128,7 @@ function applyConfig(next: EditorConfig): void {
   }
   custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
+  toolbar?.setExport(!!next.canExportPdf, next.exportPdfHint ?? '');
   for (const cell of document.querySelectorAll<HTMLElement>('.cm-md-cell')) cell.spellcheck = !!next.spellCheck;
   links.setEnabled(next.checkLinks !== false);
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
@@ -510,9 +511,10 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   wikiLinks = !!message.config.wikiLinks;
   applyConfig(message.config);
 
-  toolbar = createToolbar(runCommand, isMac);
+  toolbar = createToolbar(runCommand, isMac, (action) => host.post({ type: 'export', action }));
   toolbar.setMode(message.mode);
   toolbar.setVisible(config.showToolbar);
+  toolbar.setExport(!!config.canExportPdf, config.exportPdfHint ?? '');
   const editorHost = document.createElement('div');
   editorHost.className = 'mdl-editor';
   app.replaceChildren(toolbar.dom, editorHost);

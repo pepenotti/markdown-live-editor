@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
-import { exportHtml, exportPdf, removeTempFiles, wikiHrefs } from './export';
+import { detectBrowser, type ExportContext, exportHtml, exportPdf, lastExport, removeTempFiles, wikiHrefs } from './export';
 import { isNotePath } from '../shared/wikiLinks';
 import { BacklinksProvider } from './backlinks';
 import { listFiles, resolveUris, saveImage } from './images';
@@ -9,6 +9,7 @@ import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
 import { renderer, rendererLoaded } from './renderer';
 import { insertTocInTextEditor, updateToc, updateTocOnSave } from './toc';
+import { stubUi, ui } from './ui';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
@@ -146,35 +147,93 @@ export function activate(context: vscode.ExtensionContext): unknown {
     return undefined;
   });
 
-  register('copyAsHtml', async () => {
-    const session = provider.active;
-    if (!session) return;
-    await session.flush();
-    const selected = await session.selectedText();
-    const text = selected || session.document.getText();
-    // A copied fragment has no folder, so with wiki links on a note is copied as its text.
-    const { html } = renderer().renderMarkdown(text, { wikiLinks: await wikiHrefs(session.document, text, provider.notes, false) });
-    await vscode.env.clipboard.writeText(html);
-    vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
-  });
+  /* ---------- copy and export ---------- */
+  // These need a document, not an editor of ours: they also work from the plain text editor
+  // and from the Explorer. Every path ends with a file, a copy, or a message saying why not.
 
-  const exporting = (what: string, run: (session: Session) => Promise<unknown>) => async () => {
-    const session = provider.active;
-    if (!session) return undefined;
-    await session.flush();
+  /** The document a command is about: the one handed over, the active editor of ours, or the active Markdown tab. */
+  const documentFor = async (resource: unknown): Promise<vscode.TextDocument | undefined> => {
     try {
-      return await run(session);
+      if (resource instanceof vscode.Uri) return await vscode.workspace.openTextDocument(resource);
+      const session = provider.active;
+      if (session) return session.document;
+      const editor = vscode.window.activeTextEditor;
+      if (editor && (editor.document.languageId === 'markdown' || isNotePath(editor.document.uri.path))) return editor.document;
+      const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+      if (input instanceof vscode.TabInputCustom && input.viewType === VIEW_TYPE) return await vscode.workspace.openTextDocument(input.uri);
     } catch (err) {
-      void vscode.window.showErrorMessage(`${what} failed: ${err instanceof Error ? err.message : String(err)}`);
+      void ui.error(`The file could not be opened: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+    void ui.info('Open a Markdown file first: there is nothing to export or copy here.');
+    return undefined;
+  };
+
+  /** Typing that an editor of ours has not sent yet belongs in the export. */
+  const flush = async (document: vscode.TextDocument) => {
+    await Promise.all(provider.sessionsFor(document.uri).map((session) => session.flush().catch(() => undefined)));
+  };
+
+  let browser = detectBrowser();
+  const exportContext: ExportContext = { dist: vscode.Uri.joinPath(context.extensionUri, 'dist').fsPath, browser: () => browser, notes: provider.notes };
+  // PDF export is offered only while a browser that can print is there. The context key says
+  // "unavailable" rather than "available" so that the command is not hidden before this
+  // extension has been activated and had the chance to look.
+  const announceBrowser = () => {
+    browser = detectBrowser();
+    void vscode.commands.executeCommand('setContext', 'seamlessMarkdown.pdfUnavailable', !browser.path);
+    provider.setExportState({ canExportPdf: !!browser.path, exportPdfHint: browser.reason ?? '' });
+  };
+  announceBrowser();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('seamlessMarkdown.export.browserPath')) announceBrowser();
+    }),
+  );
+
+  const exporting = (what: string, run: (document: vscode.TextDocument, context: ExportContext) => Promise<vscode.Uri | undefined>) => async (resource?: unknown) => {
+    const document = await documentFor(resource);
+    if (!document) return undefined;
+    try {
+      await flush(document);
+      return await run(document, exportContext);
+    } catch (err) {
+      void ui.error(`${what} failed: ${err instanceof Error ? err.message : String(err)}`);
       return undefined;
     }
   };
-  // A target passed as an argument skips the save dialog (used by the tests and by other extensions).
-  register('exportHtml', (target?: unknown) =>
-    exporting('The HTML export', (session) => exportHtml(session.document, target instanceof vscode.Uri ? target : undefined, provider.notes))(),
-  );
-  register('exportPdf', exporting('The PDF export', (session) => exportPdf(session.document, { notes: provider.notes })));
+  const runExportHtml = exporting('The HTML export', exportHtml);
+  const runExportPdf = exporting('The PDF export', exportPdf);
+  register('exportHtml', runExportHtml);
+  register('exportPdf', runExportPdf);
   context.subscriptions.push({ dispose: removeTempFiles });
+
+  /** Copies the selection, or else the whole document, as an HTML fragment. */
+  const copyAsHtml = async (resource?: unknown, from?: Session) => {
+    const document = from?.document ?? (await documentFor(resource));
+    if (!document) return;
+    try {
+      await flush(document);
+      const session = from ?? provider.sessionsFor(document.uri).find((s) => s === provider.active);
+      const editor = vscode.window.activeTextEditor;
+      const selected = session ? await session.selectedText() : editor && editor.document === document ? editor.document.getText(editor.selection) : '';
+      const text = selected || document.getText();
+      // A copied fragment has no folder, so with wiki links on a note is copied as its text.
+      const { html } = renderer().renderMarkdown(text, { wikiLinks: await wikiHrefs(document, text, provider.notes, false) });
+      await vscode.env.clipboard.writeText(html);
+      vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
+    } catch (err) {
+      void ui.error(`Copy as HTML failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  register('copyAsHtml', (resource?: unknown) => copyAsHtml(resource));
+
+  // The Export menu in the toolbar of an editor.
+  provider.exportHandler = (session, action) => {
+    if (action === 'html') void runExportHtml(session.document.uri);
+    else if (action === 'pdf') void runExportPdf(session.document.uri);
+    else void copyAsHtml(undefined, session);
+  };
 
   /* ---------- table of contents ---------- */
   // Both commands also work in the plain text editor.
@@ -242,7 +301,9 @@ export function activate(context: vscode.ExtensionContext): unknown {
 
   if (context.extensionMode !== vscode.ExtensionMode.Test) return undefined;
 
-  // Hooks for the integration tests.
+  // Hooks for the integration tests. The dialogs are answered and recorded; everything else is the real thing.
+  const uiStub = stubUi();
+  lastExport.keep = true;
   const only = async (uri: vscode.Uri): Promise<Session> => {
     for (let i = 0; i < 100; i++) {
       const session = provider.sessionsFor(uri)[0];
@@ -264,14 +325,22 @@ export function activate(context: vscode.ExtensionContext): unknown {
     states: async (uri: vscode.Uri) => Promise.all(provider.sessionsFor(uri).map((s) => s.debugState())),
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
     rendererLoaded: () => rendererLoaded(),
-    // The PDF export on a machine without a browser that can print; returns what would have been opened.
-    exportPdfWithoutBrowser: async (uri: vscode.Uri) => {
-      const session = await only(uri);
-      await session.flush();
-      const opened: string[] = [];
-      const file = await exportPdf(session.document, { browser: null, open: async (target) => void opened.push(target.fsPath), notes: provider.notes });
-      return { file, opened };
+    /** Answers the next save dialog with `target` (undefined cancels it) and forgets what was shown before. */
+    answerSaveDialog: (target: vscode.Uri | undefined) => {
+      uiStub.reset();
+      uiStub.saveAnswers.push(target);
     },
+    /** Presses this button on the next notification that offers it. */
+    choose: (_uri: vscode.Uri | undefined, button: string) => void uiStub.choices.push(button),
+    /** The dialogs and notifications shown since the last `answerSaveDialog` or `resetUi`. */
+    shown: () => uiStub.log.map((entry) => ({ ...entry })),
+    resetUi: () => uiStub.reset(),
+    /** The HTML the last export rendered (what a PDF was printed from). */
+    lastExportHtml: () => lastExport.html,
+    /** The browser the export would use right now, or why there is none. */
+    exportBrowser: () => ({ ...browser }),
+    /** Handles a message as if the editor's toolbar had sent it. */
+    fromWebview: async (uri: vscode.Uri, message: WebviewMessage) => (await only(uri)).receive(message),
     outline: async (uri: vscode.Uri) => buildOutline(extractHeadings((await only(uri)).document.getText())),
     openLink: async (uri: vscode.Uri, href: string) => provider.openLink(await only(uri), href),
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
@@ -297,7 +366,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     openWikiLink: async (uri: vscode.Uri, target: string, heading: string, create: boolean) =>
       provider.openWikiLink(await only(uri), target, heading, async () => create),
     openBacklink: async (uri: vscode.Uri, line: number) => provider.openAtLine(uri, line),
-  } satisfies Record<string, (uri: vscode.Uri, ...rest: any[]) => unknown>;
+  } satisfies Record<string, (uri: any, ...rest: any[]) => unknown>;
 }
 
 export function deactivate(): void {}

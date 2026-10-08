@@ -1,14 +1,24 @@
-// Where a Chromium-based browser that can print to PDF is usually installed.
+// Where a Chromium-based browser that can draw diagrams and print to PDF is usually installed.
 
-/** Well-known paths of Chrome, Edge and Chromium for a platform, most common first. */
+/** Well-known paths of Chrome, Edge, Chromium and Brave for a platform, most common first. */
 export function browserCandidates(platform: string, env: Record<string, string | undefined>, home: string): string[] {
   if (platform === 'darwin') {
-    const apps = ['Google Chrome.app/Contents/MacOS/Google Chrome', 'Microsoft Edge.app/Contents/MacOS/Microsoft Edge', 'Chromium.app/Contents/MacOS/Chromium'];
+    const apps = [
+      'Google Chrome.app/Contents/MacOS/Google Chrome',
+      'Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      'Chromium.app/Contents/MacOS/Chromium',
+      'Brave Browser.app/Contents/MacOS/Brave Browser',
+    ];
     return ['/Applications', `${home}/Applications`].flatMap((root) => apps.map((app) => `${root}/${app}`));
   }
   if (platform === 'win32') {
     const roots = [env.PROGRAMFILES, env['PROGRAMFILES(X86)'], env.LOCALAPPDATA].filter((r): r is string => !!r);
-    const apps = ['Google\\Chrome\\Application\\chrome.exe', 'Microsoft\\Edge\\Application\\msedge.exe', 'Chromium\\Application\\chrome.exe'];
+    const apps = [
+      'Google\\Chrome\\Application\\chrome.exe',
+      'Microsoft\\Edge\\Application\\msedge.exe',
+      'Chromium\\Application\\chrome.exe',
+      'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+    ];
     return apps.flatMap((app) => roots.map((root) => `${root.replace(/\\+$/, '')}\\${app}`));
   }
   return [
@@ -20,22 +30,32 @@ export function browserCandidates(platform: string, env: Record<string, string |
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/snap/bin/chromium',
+    '/usr/bin/brave-browser',
+    '/usr/bin/brave',
+    '/snap/bin/brave',
   ];
 }
 
-/** Arguments that make a Chromium-based browser print a page to a PDF file and exit. */
-export function printToPdfArgs(pageUrl: string, pdfPath: string, profileDir: string, waitForScripts: boolean): string[] {
+/**
+ * Arguments for a headless Chromium-based browser that is driven over the DevTools pipe.
+ * They are fixed: no path of a document is ever part of the command line.
+ */
+export function browserArgs(profileDir: string): string[] {
   return [
     '--headless',
-    '--disable-gpu',
+    '--remote-debugging-pipe',
+    `--user-data-dir=${profileDir}`,
     '--no-first-run',
     '--no-default-browser-check',
-    `--user-data-dir=${profileDir}`,
-    // Only a page that loads Mermaid has scripts to wait for.
-    ...(waitForScripts ? ['--virtual-time-budget=15000'] : []),
-    '--no-pdf-header-footer',
-    `--print-to-pdf=${pdfPath}`,
-    pageUrl,
+    '--disable-gpu',
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-component-update',
+    '--disable-sync',
+    '--disable-default-apps',
+    '--mute-audio',
+    '--hide-scrollbars',
+    'about:blank',
   ];
 }
 

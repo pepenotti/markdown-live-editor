@@ -43,7 +43,7 @@ const closes = (text: string) => /\$\$[ \t]*$/.test(text);
  * Adds `math_inline` and `math_block` tokens. Their `content` is the TeX; an inline token
  * has `meta.display` set when it was written with two dollars.
  */
-export function mathPlugin(md: MarkdownIt, render: (tex: string, display: boolean) => string): void {
+export function mathPlugin(md: MarkdownIt, render: (tex: string, display: boolean, env: unknown) => string): void {
   md.inline.ruler.before('escape', 'math_inline', (state, silent) => {
     const end = inlineMathEnd(state.src, state.pos, state.posMax);
     if (end < 0) return false;
@@ -91,6 +91,6 @@ export function mathPlugin(md: MarkdownIt, render: (tex: string, display: boolea
     return true;
   });
 
-  md.renderer.rules.math_inline = (tokens, idx) => render(tokens[idx].content, tokens[idx].meta?.display === true);
-  md.renderer.rules.math_block = (tokens, idx) => `<div class="math-block">${render(tokens[idx].content, true)}</div>\n`;
+  md.renderer.rules.math_inline = (tokens, idx, _options, env) => render(tokens[idx].content, tokens[idx].meta?.display === true, env);
+  md.renderer.rules.math_block = (tokens, idx, _options, env) => `<div class="math-block">${render(tokens[idx].content, true, env)}</div>\n`;
 }

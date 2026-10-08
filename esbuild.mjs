@@ -1,5 +1,6 @@
 // Builds the two bundles: the extension host (Node, CommonJS) and the webview (browser, IIFE).
 import * as esbuild from 'esbuild';
+import { copyFileSync, mkdirSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 const production = process.argv.includes('--production');
@@ -62,6 +63,10 @@ const diagrams = {
   sourcemap: false,
   minify: true,
 };
+
+// The KaTeX style sheet as it is: an export embeds it, with the fonts it needs from dist/fonts.
+mkdirSync('dist', { recursive: true });
+copyFileSync('node_modules/katex/dist/katex.min.css', 'dist/katex.css');
 
 if (watch) {
   const contexts = await Promise.all([esbuild.context(extension), esbuild.context(exporter), esbuild.context(webview), esbuild.context(styles), esbuild.context(diagrams)]);

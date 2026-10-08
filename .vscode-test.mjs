@@ -13,12 +13,18 @@ const candidates = [
 ].filter(Boolean);
 const installed = process.env.VSCODE_TEST_DOWNLOAD ? undefined : candidates.find((p) => existsSync(p));
 
+// The extension under test is this working tree, or the folder MDL_EXTENSION_PATH names:
+// `npm run test:vsix` sets it to the unpacked .vsix, so the suite runs against the packaged files.
+const extension = process.env.MDL_EXTENSION_PATH || undefined;
+if (extension && !existsSync(join(extension, 'package.json'))) throw new Error(`MDL_EXTENSION_PATH has no package.json: ${extension}`);
+
 // VS Code opens a socket inside its user-data folder, and socket paths are limited to
 // about 100 characters, so the profile lives in the system temp folder, not in the project.
 const profile = join(tmpdir(), 'mdl-vscode-test');
 
 export default defineConfig({
   files: 'test/integration/**/*.test.js',
+  extensionDevelopmentPath: extension,
   useInstallation: installed ? { fromPath: installed } : undefined,
   launchArgs: ['--user-data-dir', join(profile, 'user'), '--extensions-dir', join(profile, 'ext'), '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes'],
   mocha: { timeout: 60000, ui: 'tdd' },

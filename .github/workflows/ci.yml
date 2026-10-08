@@ -29,7 +29,10 @@ jobs:
       - run: npm run build
       - name: Integration tests in VS Code
         run: xvfb-run -a npx vscode-test
-      - run: npm run package
+      # Builds the .vsix that is uploaded below, unpacks it like an installation and runs the
+      # same suite against those files, so a file missing from the package fails here.
+      - name: Package, then integration tests against the packaged extension
+        run: xvfb-run -a npm run test:vsix
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vsix
