@@ -1,7 +1,8 @@
-import MarkdownIt from 'markdown-it';
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
+import { renderMarkdown } from '../shared/exportHtml';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
+import { exportHtml, exportPdf } from './export';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
@@ -140,10 +141,27 @@ export function activate(context: vscode.ExtensionContext): unknown {
     if (!session) return;
     await session.flush();
     const selected = await session.selectedText();
-    const html = new MarkdownIt({ html: true, linkify: true }).render(selected || session.document.getText());
+    const { html } = renderMarkdown(selected || session.document.getText());
     await vscode.env.clipboard.writeText(html);
     vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
   });
+
+  const exporting = (what: string, run: (session: Session) => Promise<unknown>) => async () => {
+    const session = provider.active;
+    if (!session) return undefined;
+    await session.flush();
+    try {
+      return await run(session);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`${what} failed: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  };
+  // A target passed as an argument skips the save dialog (used by the tests and by other extensions).
+  register('exportHtml', (target?: unknown) =>
+    exporting('The HTML export', (session) => exportHtml(session.document, target instanceof vscode.Uri ? target : undefined))(),
+  );
+  register('exportPdf', exporting('The PDF export', (session) => exportPdf(session.document)));
 
   register('setAsDefault', async () => {
     await provider.setDefault(true);

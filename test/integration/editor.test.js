@@ -240,6 +240,58 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(html, '<p>First line</p>\n<p>Second paragraph with a word.</p>\n');
   });
 
+  test('exports a self-contained HTML file', async () => {
+    const { uri } = await open('features.md');
+    const target = vscode.Uri.file(path.join(dir, 'features-export.html'));
+    const written = await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    assert.strictEqual(written && written.toString(), target.toString());
+    const html = fs.readFileSync(target.fsPath, 'utf8');
+    assert.ok(html.startsWith('<!DOCTYPE html>'), 'a complete document');
+    assert.ok(html.includes('<title>Seamless Markdown</title>'), 'title from the first heading');
+    assert.ok(html.includes('<h2 id="inline-formatting">Inline formatting</h2>'), 'headings have ids');
+    assert.ok(!html.includes('Feature tour'), 'front matter is left out');
+    assert.ok(html.includes('<input type="checkbox" disabled checked> A finished task'), 'task lists have checkboxes');
+    assert.ok(/<img src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="The pipeline">/.test(html), 'the SVG is embedded');
+    assert.ok(/<img src="data:image\/png;base64,[A-Za-z0-9+/=]+" alt="a photo" title="Hills at dusk">/.test(html), 'the PNG is embedded');
+    assert.ok(html.includes('<img src="assets/nope.png" alt="Missing image">'), 'a missing image keeps its path');
+    assert.ok(!/<script|<link|@import/.test(html), 'nothing is loaded from elsewhere');
+
+    const settings = vscode.workspace.getConfiguration('seamlessMarkdown.export');
+    try {
+      await settings.update('embedImages', false, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      const linked = fs.readFileSync(target.fsPath, 'utf8');
+      assert.ok(linked.includes('<img src="assets/diagram.svg" alt="The pipeline">'), 'images keep their relative paths');
+      assert.ok(!linked.includes('src="data:'), 'nothing is embedded');
+    } finally {
+      await settings.update('embedImages', undefined, vscode.ConfigurationTarget.Global);
+    }
+    assert.strictEqual(vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString()).isDirty, false);
+  });
+
+  test('exports math as MathML and, by default, a diagram as its source', async () => {
+    await open('diagrams.md');
+    const target = vscode.Uri.file(path.join(dir, 'diagrams-export.html'));
+    await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+    const html = fs.readFileSync(target.fsPath, 'utf8');
+    assert.strictEqual((html.match(/<math /g) || []).length, 3, 'three formulas');
+    assert.ok(html.includes('<div class="math-block"><span class="katex"><math '), 'block math');
+    assert.ok(html.includes('a price like $5 or $10 stays a price'), 'prices are not math');
+    assert.ok(html.includes('<pre><code class="language-mermaid">flowchart LR'), 'the diagram is a code block');
+    assert.ok(!html.includes('<script'), 'no script without the CDN setting');
+
+    const settings = vscode.workspace.getConfiguration('seamlessMarkdown.export');
+    try {
+      await settings.update('mermaidFromCdn', true, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand('seamlessMarkdown.exportHtml', target);
+      const drawn = fs.readFileSync(target.fsPath, 'utf8');
+      assert.ok(drawn.includes('<pre class="mermaid">flowchart LR'), 'the diagram is left for Mermaid to draw');
+      assert.ok(/<script type="module">\s*import mermaid from 'https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid@\d+\//.test(drawn), 'Mermaid comes from the CDN');
+    } finally {
+      await settings.update('mermaidFromCdn', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   test('builds the outline from the headings', async () => {
     const { uri } = await open('features.md');
     const outline = await api.outline(uri);

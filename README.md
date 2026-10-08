@@ -64,6 +64,7 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
 - **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
 - **Copy as HTML**: copies the selection, or the whole document, as HTML.
+- **Export**: **Export as HTML…** writes one self-contained file, with images embedded and math as MathML. **Export as PDF…** opens a print version in your browser for Print → Save as PDF, or creates the PDF directly when Chrome, Edge or Chromium is installed. Nothing is downloaded.
 - **Find and replace**, **Go to Heading**, **folding** of the section under a heading (hover a heading and click the arrow in the margin), word count and reading time in the status bar.
 - Follows the VS Code colour theme, and works with undo, redo, save, hot exit, split editors and source control exactly like a text file, because it edits the same text document.
 
@@ -105,6 +106,9 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
+| `seamlessMarkdown.export.embedImages` | `true` | Embed local images in exported HTML. When off, images keep their relative paths |
+| `seamlessMarkdown.export.mermaidFromCdn` | `false` | Draw Mermaid diagrams in exported files by loading Mermaid from a CDN. When off, a diagram is exported as its source |
+| `seamlessMarkdown.export.browserPath` | empty | Chrome, Edge or Chromium executable for **Create PDF now**. Empty looks in the usual places |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations

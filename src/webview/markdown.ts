@@ -97,12 +97,7 @@ export const math: MarkdownConfig = {
   ],
 };
 
-/** The TeX inside a math node's text. */
-export function texOf(source: string): string {
-  const width = source.startsWith('$$') ? 2 : 1;
-  const end = source.endsWith('$'.repeat(width)) && source.length >= width * 2 ? source.length - width : source.length;
-  return source.slice(width, end).trim();
-}
+export { texOf } from '../shared/mathPlugin';
 
 export function markdownSupport() {
   return markdown({
