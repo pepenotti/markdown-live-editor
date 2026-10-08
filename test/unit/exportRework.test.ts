@@ -160,6 +160,10 @@ let reply = (m) => {
     const sources = JSON.parse(m.params.expression.slice(m.params.expression.lastIndexOf('})(') + 3, -1));
     return { result: { value: JSON.stringify(sources.map((s, i) => (s.includes('bad') ? null : '<svg id="d' + i + '">' + s.length + '</svg>'))) } };
   }
+  if (m.method === 'Browser.close') {
+    setTimeout(() => process.exit(0), 20);
+    return {};
+  }
   if (m.method === 'Page.printToPDF') return { data: Buffer.from(${JSON.stringify(PDF)}).toString('base64') };
   return {};
 };
@@ -201,7 +205,8 @@ setInterval(() => {}, 1000);
     const [drawn, pdf] = await BrowserSession.use(browser, async (session) => [await session.drawDiagrams(page, ['one', 'bad one', 'three!']), await session.printPdf(page)] as const, 10_000);
     expect(drawn).toEqual(['<svg id="d0">3</svg>', null, '<svg id="d2">6</svg>']);
     expect(pdf.toString('latin1')).toBe(PDF);
-    // This stand-in never exits by itself, like the real browser on some machines.
+    // It was asked to close, which lets a real browser stop its helper processes in order.
+    expect(JSON.parse(readFileSync(browser + '.seen', 'utf8')).at(-1)).toBe('Browser.close');
     expect(alive(browser)).toBe(false);
     expect(existsSync(profileOf(browser))).toBe(false);
     // No path reaches the command line: the page is handed over through the protocol, as a URL.
@@ -215,10 +220,19 @@ setInterval(() => {}, 1000);
     expect(seen.indexOf('Network.emulateNetworkConditions')).toBeLessThan(seen.indexOf('Runtime.evaluate'));
   });
 
+  unix('stops a browser that agrees to close and then stays, as the real one does on some machines', async () => {
+    const browser = fakeBrowser('stays', `const first = reply; reply = (m) => (m.method === 'Browser.close' ? {} : first(m));`);
+    const started = Date.now();
+    expect((await BrowserSession.use(browser, (session) => session.printPdf(page), 10_000)).toString('latin1')).toBe(PDF);
+    expect(alive(browser)).toBe(false);
+    expect(existsSync(profileOf(browser))).toBe(false);
+    expect(Date.now() - started).toBeLessThan(6000);
+  });
+
   unix('asks the browser for nothing when there are no diagrams', async () => {
     const browser = fakeBrowser('none');
     expect(await BrowserSession.use(browser, (session) => session.drawDiagrams(page, []), 10_000)).toEqual([]);
-    expect(existsSync(browser + '.seen')).toBe(false);
+    expect(JSON.parse(readFileSync(browser + '.seen', 'utf8'))).toEqual(['Browser.close']);
   });
 
   unix('gives up on a browser that never answers, and stops it', async () => {

@@ -15,6 +15,8 @@ import { pathToFileURL } from 'node:url';
 import { browserArgs, browserCandidates, isCompletePdf } from '../shared/browsers';
 
 const EXIT_GRACE_MS = 3000;
+/** How long a browser that was asked to close gets before it is stopped. */
+const CLOSE_GRACE_MS = 1500;
 /** Everything one export asks of the browser has to fit in this. */
 export const SESSION_TIMEOUT_MS = 90_000;
 
@@ -34,21 +36,43 @@ interface Reply {
 
 type Listener = { method: string; sessionId: string; resolve: () => void; reject: (error: Error) => void };
 
-/** Resolves when the process is gone, killing it hard if it ignores the first signal. */
-function stopped(child: ChildProcess): Promise<void> {
+const exited = (child: ChildProcess) => child.pid === undefined || child.exitCode !== null || child.signalCode !== null;
+
+/**
+ * Resolves when the process is gone. `ask` asks the browser to close by itself first, which
+ * lets it stop its helper processes in order; if it has not gone after a moment it is
+ * killed, and killed hard if it ignores that too.
+ */
+function stopped(child: ChildProcess, ask?: () => void): Promise<void> {
   return new Promise((resolve) => {
     // A browser that never started has no process to wait for.
-    if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return resolve();
-    const hard = setTimeout(() => child.kill('SIGKILL'), EXIT_GRACE_MS);
-    // Whatever happens, the export itself must come to an end.
-    const giveUp = setTimeout(resolve, EXIT_GRACE_MS * 2);
+    if (exited(child)) return resolve();
+    const timers: NodeJS.Timeout[] = [];
+    const kill = () => {
+      if (exited(child)) return;
+      child.kill();
+      timers.push(setTimeout(() => child.kill('SIGKILL'), EXIT_GRACE_MS));
+    };
     child.once('exit', () => {
-      clearTimeout(hard);
-      clearTimeout(giveUp);
+      for (const timer of timers) clearTimeout(timer);
       resolve();
     });
-    child.kill();
+    // Whatever happens, the export itself must come to an end.
+    timers.push(setTimeout(resolve, CLOSE_GRACE_MS + EXIT_GRACE_MS * 2));
+    if (ask) {
+      ask();
+      timers.push(setTimeout(kill, CLOSE_GRACE_MS));
+    } else kill();
   });
+}
+
+/** Removes the profile folder. A helper process on its way out can write to it once more, so look again. */
+async function removeProfile(profile: string): Promise<void> {
+  for (let round = 0; round < 4; round++) {
+    await fs.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (!existsSync(profile)) return;
+  }
 }
 
 export class BrowserSession {
@@ -57,7 +81,7 @@ export class BrowserSession {
   private readonly listeners = new Set<Listener>();
   /** Events that arrived before anybody waited for them. */
   private readonly seen = new Set<string>();
-  private failure: Error | undefined;
+  failure: Error | undefined;
   private stderr = '';
   private buffer = '';
 
@@ -83,12 +107,18 @@ export class BrowserSession {
       return await work(session);
     } finally {
       if (session) clearTimeout(session.deadline);
+      // A browser that still answers is asked to close; one that timed out or broke is just stopped.
+      const responsive = session !== undefined && session.failure === undefined;
       session?.fail(new Error('The browser was closed.'));
+      const pipe = child?.stdio[3] as Writable | null | undefined;
+      const ask = () => {
+        pipe?.write(JSON.stringify({ id: 0, method: 'Browser.close' }) + '\0');
+        pipe?.end();
+      };
       // Never leave the browser behind, and remove its profile only once it has let go of it.
-      // Closing the pipe tells the browser and its helper processes to go; the signal makes sure.
-      (child?.stdio[3] as Writable | null | undefined)?.end();
-      if (child) await stopped(child);
-      await fs.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => undefined);
+      if (child) await stopped(child, responsive ? ask : undefined);
+      pipe?.destroy();
+      await removeProfile(profile);
     }
   }
 
