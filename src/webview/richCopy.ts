@@ -90,10 +90,16 @@ export const NO_FOCUS = 'the editor does not have the keyboard focus';
  */
 export async function copyRich(html: string, text: string, takeFocus: () => void = () => {}): Promise<RichCopyResult> {
   let result = await attempt(html, text);
-  if (result.ok || document.hasFocus()) return result;
+  if (result.ok) return result;
+  // `document.hasFocus()` can say yes while the browser still refuses: inside the nested
+  // frames of a VS Code editor the two do not always agree. So ask for the focus either way.
   takeFocus();
-  if (await focused(1500)) result = await attempt(html, text);
-  return result.ok || document.hasFocus() ? result : { ok: false, error: NO_FOCUS };
+  if (await focused(1500)) {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    result = await attempt(html, text);
+  }
+  if (result.ok) return result;
+  return /not focused|refused/i.test(result.error) || !document.hasFocus() ? { ok: false, error: NO_FOCUS } : result;
 }
 
 /** What is on the clipboard, as far as this page may read it (for the tests). */

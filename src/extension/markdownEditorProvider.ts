@@ -310,12 +310,17 @@ export class Session implements SyncTarget {
    */
   async copyRich(html: string, text: string): Promise<RichCopyResult> {
     if (!this.ready) return { ok: false, error: 'the editor is still loading' };
-    if (!this.panel.active) {
+    let result: RichCopyResult = { ok: false, error: 'the editor did not answer' };
+    for (let round = 0; round < 2 && !result.ok; round++) {
+      // Revealing the panel hands the keyboard focus to the page, also when its tab is the
+      // active one already: after a command from the palette or a menu the tab is active
+      // but the page inside it does not have the focus yet, and may not use the clipboard.
       this.panel.reveal(undefined, false);
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, round ? 400 : 150));
+      const reply = await this.ask<{ result: RichCopyResult }>((reqId) => ({ type: 'copyRich', reqId, html, text }), 4000);
+      if (reply) result = reply.result;
     }
-    const reply = await this.ask<{ result: RichCopyResult }>((reqId) => ({ type: 'copyRich', reqId, html, text }), 4000);
-    return reply?.result ?? { ok: false, error: 'the editor did not answer' };
+    return result;
   }
 
   /** What the editor reads from the clipboard (for the tests). */
