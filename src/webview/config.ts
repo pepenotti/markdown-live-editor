@@ -7,9 +7,11 @@ export interface RenderConfig {
   /** Width of one monospace character divided by the font size. */
   monoRatio: number;
   tableAutoAlign: boolean;
+  /** Let the browser check the spelling of the text. */
+  spellCheck: boolean;
 }
 
-const DEFAULT: RenderConfig = { resolveUrl: (s) => s, monoRatio: 0.6, tableAutoAlign: true };
+const DEFAULT: RenderConfig = { resolveUrl: (s) => s, monoRatio: 0.6, tableAutoAlign: true, spellCheck: false };
 
 export const renderConfig = Facet.define<RenderConfig, RenderConfig>({
   combine: (values) => values[0] ?? DEFAULT,

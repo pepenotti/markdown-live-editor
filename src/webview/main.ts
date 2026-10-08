@@ -34,11 +34,12 @@ import {
 } from './commands/format';
 import { hostActions, makeResolver, renderConfig, type RenderConfig } from './config';
 import { blockField } from './decorations/blocks';
-import { inlinePlugin, linkInfo } from './decorations/inline';
+import { inlinePlugin } from './decorations/inline';
 import { editingBehaviour } from './fullMode';
 import { editGuard } from './guard';
 import { HostBridge } from './host';
 import { focusPopover, popoverField } from './linkPopover';
+import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
 import { cursorFix, externalChange, modeField, setMode } from './modes';
 import { SyncClient } from './syncClient';
@@ -91,7 +92,7 @@ function measureMonoRatio(): number {
 }
 
 function currentRenderConfig(): RenderConfig {
-  return { resolveUrl, monoRatio: measureMonoRatio(), tableAutoAlign: config.tableAutoAlign };
+  return { resolveUrl, monoRatio: measureMonoRatio(), tableAutoAlign: config.tableAutoAlign, spellCheck: !!config.spellCheck };
 }
 
 function applyConfig(next: EditorConfig): void {
@@ -110,6 +111,7 @@ function applyConfig(next: EditorConfig): void {
   }
   custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
+  for (const cell of document.querySelectorAll<HTMLElement>('.cm-md-cell')) cell.spellcheck = !!next.spellCheck;
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
 }
 
@@ -306,10 +308,25 @@ function hrefAt(state: EditorState, pos: number): string | null {
   return null;
 }
 
+/** Where Ctrl/Cmd+click on a footnote leads: from a reference to its text, from the text back to the reference. */
+function footnoteTarget(state: EditorState, pos: number): number | null {
+  const note = footnoteAt(state, pos);
+  if (!note) return null;
+  const all = footnotes(state);
+  return (note.reference ? all.definitions : all.references).get(note.id) ?? null;
+}
+
 const domHandlers = EditorView.domEventHandlers({
   mousedown(event, v) {
     if (event.button !== 0 || !(isMac ? event.metaKey : event.ctrlKey)) return false;
     const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+    const note = pos === null ? null : footnoteTarget(v.state, pos);
+    if (note !== null) {
+      event.preventDefault();
+      v.dispatch({ selection: { anchor: note }, effects: EditorView.scrollIntoView(note, { y: 'center' }), userEvent: 'select' });
+      v.focus();
+      return true;
+    }
     const href = pos === null ? null : (hrefAt(v.state, pos) ?? hrefAt(v.state, Math.min(pos + 1, v.state.doc.length)));
     if (!href) return false;
     event.preventDefault();
@@ -481,7 +498,10 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     domHandlers,
     EditorView.updateListener.of(onUpdate),
     EditorView.editorAttributes.compute([modeField], (state) => ({ class: `mdl-mode-${state.field(modeField)}` })),
-    EditorView.contentAttributes.of({ 'aria-label': 'Markdown document' }),
+    EditorView.contentAttributes.compute([renderConfig], (state) => ({
+      'aria-label': 'Markdown document',
+      spellcheck: String(state.facet(renderConfig).spellCheck),
+    })),
     nonce ? EditorView.cspNonce.of(nonce) : [],
   ];
 
