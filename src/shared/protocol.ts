@@ -19,6 +19,8 @@ export interface EditorConfig {
   showToolbar: boolean;
   /** Re-pad the pipes of a table whenever one of its cells is edited. */
   tableAutoAlign: boolean;
+  /** Convert formatted clipboard content (text/html) to Markdown when pasting. */
+  pasteRichText: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
   /** Turn on the browser's spell checking for the text. */

@@ -60,7 +60,7 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Math**: `$x^2$` inline and `$$` blocks, drawn with KaTeX. A price such as $5 is left alone.
 - **Mermaid diagrams**: a `mermaid` code block is drawn as a diagram. Click a diagram or formula block, or move into it with the arrow keys, to edit its source with the result shown underneath.
 - **Slash menu**: type `/` at the start of a line to insert a heading, list, quote, code block, table, image, link or divider.
-- **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table.
+- **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table; pasting formatted text from a web page, Google Docs or Word makes Markdown (hold `Shift` while pasting for the plain text).
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
 - **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
@@ -105,6 +105,7 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.showToolbar` | `true` | Show the toolbar |
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
+| `seamlessMarkdown.pasteRichText` | `true` | Paste formatted text (from a web page, Google Docs, Word) as Markdown |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
 | `seamlessMarkdown.spellCheck` | `false` | Turn on the built-in spell checking for the text and table cells |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |

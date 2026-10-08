@@ -25,6 +25,7 @@ import {
   insertPaths,
   insertRule,
   insertTable,
+  pasteMarkdown,
   setHeading,
   shiftHeading,
   toggleInline,
@@ -38,6 +39,7 @@ import { inlinePlugin } from './decorations/inline';
 import { editingBehaviour } from './fullMode';
 import { editGuard } from './guard';
 import { HostBridge } from './host';
+import { type Conversion, hasFormattedText, markdownForPaste } from './htmlToMarkdown';
 import { focusPopover, popoverField } from './linkPopover';
 import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
@@ -308,6 +310,9 @@ function hrefAt(state: EditorState, pos: number): string | null {
   return null;
 }
 
+/** When Shift+V was last pressed with the paste modifier: the mark of "paste as plain text". */
+let plainPasteKey = 0;
+
 /** Where Ctrl/Cmd+click on a footnote leads: from a reference to its text, from the text back to the reference. */
 function footnoteTarget(state: EditorState, pos: number): number | null {
   const note = footnoteAt(state, pos);
@@ -317,6 +322,13 @@ function footnoteTarget(state: EditorState, pos: number): number | null {
 }
 
 const domHandlers = EditorView.domEventHandlers({
+  keydown(event) {
+    // A paste event does not say that Shift was held. Chromium's "paste and match style" (Ctrl/Cmd+Shift+V)
+    // hands over a clipboard with only text/plain, but nothing promises that everywhere, and the
+    // link and table shortcuts work from the plain text, so the key press is remembered as well.
+    plainPasteKey = event.shiftKey && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v' ? Date.now() : 0;
+    return false;
+  },
   mousedown(event, v) {
     if (event.button !== 0 || !(isMac ? event.metaKey : event.ctrlKey)) return false;
     const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
@@ -337,14 +349,18 @@ const domHandlers = EditorView.domEventHandlers({
     const data = event.clipboardData;
     if (!data) return false;
     const images = Array.from(data.files).filter((f) => f.type.startsWith('image/'));
-    if (images.length) {
+    const text = data.getData('text/plain');
+    if (images.length && !hasFormattedText(text, data.getData('text/html'))) {
       event.preventDefault();
       void insertImageFiles(images);
       return true;
     }
-    const text = data.getData('text/plain');
+    // Pasting with Shift held asks for the plain text exactly as it is: no link, table or Markdown conversion.
+    const plain = Date.now() - plainPasteKey < 1000;
+    plainPasteKey = 0;
+    if (plain) return false;
     const sel = v.state.selection.main;
-    if (!text || insideCode(v.state, sel.from)) return false;
+    if (insideCode(v.state, sel.from)) return false;
     const selected = v.state.doc.sliceString(sel.from, sel.to);
     const url = text.trim();
     if (!sel.empty && !selected.includes('\n') && /^(?:https?:\/\/|mailto:)\S+$/i.test(url) && !/^(?:https?:\/\/|mailto:)/i.test(selected) && !hrefAt(v.state, sel.from)) {
@@ -360,7 +376,17 @@ const domHandlers = EditorView.domEventHandlers({
       v.dispatch({ ...insertBlock(v.state, table), userEvent: 'input.paste' });
       return true;
     }
-    return false;
+    if (!config.pasteRichText) return false;
+    let rich: Conversion | null = null;
+    try {
+      rich = markdownForPaste(data.getData('text/html'), Array.from(data.types));
+    } catch (err) {
+      report(`Could not convert the pasted content: ${String(err)}`);
+    }
+    if (!rich) return false;
+    event.preventDefault();
+    v.dispatch(pasteMarkdown(v.state, rich.markdown, rich.block));
+    return true;
   },
   dragover(event) {
     const types = event.dataTransfer?.types ?? [];

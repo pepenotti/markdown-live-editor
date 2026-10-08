@@ -5,6 +5,7 @@ import {
   insertPaths,
   insertRule,
   insertTable,
+  pasteMarkdown,
   setHeading,
   shiftHeading,
   toggleInline,
@@ -12,7 +13,7 @@ import {
   toggleQuote,
   toggleTask,
 } from '../../src/webview/commands/format';
-import { run } from './helpers';
+import { run, stateOf } from './helpers';
 
 describe('inline formatting', () => {
   it('wraps and unwraps a selection', () => {
@@ -148,5 +149,37 @@ describe('links', () => {
   it('inserts image and file links', () => {
     expect(run('a ¦', insertPaths([{ path: 'assets/my pic.png', isImage: true, name: 'my pic.png' }]))).toBe('a ![](<assets/my pic.png>)¦');
     expect(run('⟦label⟧', insertPaths([{ path: 'notes.md', isImage: false, name: 'notes.md' }]))).toBe('[label](notes.md)¦');
+  });
+});
+
+describe('pasting Markdown', () => {
+  const paste = (marked: string, text: string, block: boolean) => run(marked, (state) => pasteMarkdown(state, text, block));
+
+  it('puts inline content where the cursor is', () => {
+    expect(paste('a ¦ c', '**b**', false)).toBe('a **b**¦ c');
+    expect(paste('a ⟦old⟧ c', '[b](https://e.com)', false)).toBe('a [b](https://e.com)¦ c');
+    expect(paste('¦', 'one\\\ntwo', false)).toBe('one\\\ntwo¦');
+  });
+
+  it('puts block content on lines of its own', () => {
+    expect(paste('¦', '# T\n\ntext', true)).toBe('# T\n\ntext¦');
+    expect(paste('before ¦after', '- a\n- b', true)).toBe('before\n\n- a\n- b¦\n\nafter');
+    expect(paste('before¦', '- a', true)).toBe('before\n\n- a¦');
+    expect(paste('¦after', '- a', true)).toBe('- a¦\n\nafter');
+  });
+
+  it('keeps a blank line between the block and its neighbours', () => {
+    expect(paste('above\n¦\nbelow', '# T', true)).toBe('above\n\n# T¦\n\nbelow');
+    expect(paste('above\n\n¦\n\nbelow', '# T', true)).toBe('above\n\n# T¦\n\nbelow');
+    expect(paste('above\n  ¦', '# T', true)).toBe('above\n\n# T¦');
+  });
+
+  it('replaces the selection in the same change', () => {
+    expect(paste('one ⟦two\nthree⟧ four', '> q', true)).toBe('one\n\n> q¦\n\nfour');
+    expect(paste('⟦one\ntwo⟧', '> q', true)).toBe('> q¦');
+  });
+
+  it('is a paste for undo and the edit guard', () => {
+    expect(pasteMarkdown(stateOf('¦'), 'x', false).userEvent).toBe('input.paste');
   });
 });
