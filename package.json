@@ -593,6 +593,11 @@
           "default": "",
           "editPresentation": "multilineText",
           "markdownDescription": "Extra CSS rules for the editor, for example `#app .cm-content { font-family: Georgia; }`."
+        },
+        "seamlessMarkdown.spellCheck": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the editor's built-in spell checker to check the text and table cells. Whether misspelled words are underlined depends on VS Code and the operating system."
         }
       }
     },
