@@ -71,7 +71,11 @@ function render(node: SyntaxNode, src: string, cfg: RenderConfig): Node[] {
       if (marks.length < 3) return [document.createTextNode(raw)];
       const a = el('span', children(node, src, marks[0].to, marks[1].from, cfg), 'cm-md-link');
       const url = node.getChild('URL');
-      if (url) a.title = stripUrl(src.slice(url.from, url.to));
+      if (url) {
+        a.title = stripUrl(src.slice(url.from, url.to));
+        // Read by the link check, which marks broken links in rendered cells.
+        a.dataset.href = a.title;
+      }
       return [a];
     }
     case 'Image': {

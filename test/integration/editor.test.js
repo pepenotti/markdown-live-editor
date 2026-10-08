@@ -39,6 +39,14 @@ async function inStep(uri, document) {
   }, 'the webview to match the document');
 }
 
+/** What the link check reports for a file, in document order. */
+function linkProblems(uri) {
+  return vscode.languages
+    .getDiagnostics(uri)
+    .filter((d) => d.source === 'Seamless Markdown')
+    .sort((x, y) => x.range.start.compareTo(y.range.start));
+}
+
 suite('Seamless Markdown', () => {
   suiteSetup(async () => {
     const extension = vscode.extensions.all.find((e) => e.packageJSON.name === 'seamless-markdown');
@@ -192,6 +200,165 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(api.sessionCount(target), 0);
     await api.openLink(uri, 'notes/other.md#other-note');
     await until(() => api.sessionCount(target) === 1, 'the linked file to open');
+  });
+
+  test('reports broken links in the Problems panel and in the editor, and clears them on close', async () => {
+    fs.writeFileSync(
+      path.join(dir, 'links.md'),
+      [
+        '# Links',
+        '',
+        'Fine: [note](notes/other.md), [heading](notes/other.md#other-note), [here](#links), [web](https://example.invalid/nothing.md).',
+        '',
+        'Broken: [gone](soon.md) and ![pic](assets/nope.png).',
+        'Also [anchor](notes/other.md#other-nte), [here](#linsk) and [ref][nope].',
+        '',
+      ].join('\n'),
+    );
+    const { uri, document } = await open('links.md');
+    const expected = [
+      'File not found: soon.md',
+      'File not found: assets/nope.png',
+      'No heading "other-nte" in notes/other.md',
+      'No heading "linsk" in this document',
+      'No definition for [nope]',
+    ];
+    const found = await until(() => {
+      const d = linkProblems(uri);
+      return d.length === expected.length ? d : null;
+    }, 'the diagnostics');
+    assert.deepStrictEqual(found.map((d) => d.message), expected);
+    assert.ok(found.every((d) => d.severity === vscode.DiagnosticSeverity.Warning));
+    // Each range covers exactly the link it is about.
+    assert.deepStrictEqual(found.map((d) => document.getText(d.range)), [
+      '[gone](soon.md)',
+      '![pic](assets/nope.png)',
+      '[anchor](notes/other.md#other-nte)',
+      '[here](#linsk)',
+      '[ref][nope]',
+    ]);
+    assert.deepStrictEqual([found[0].range.start.line, found[0].range.start.character], [4, 8]);
+
+    // The webview underlines the same links, having asked the host about the files.
+    await until(async () => {
+      const state = await api.state(uri);
+      return state && JSON.stringify(state.brokenLinks) === JSON.stringify(expected) ? state : null;
+    }, 'the editor to underline the broken links');
+
+    // Creating the missing file is noticed without an edit to the document.
+    fs.writeFileSync(path.join(dir, 'soon.md'), '# Soon\n');
+    await until(() => linkProblems(uri).length === expected.length - 1, 'the diagnostic of the created file to go away', 30000);
+    assert.deepStrictEqual(linkProblems(uri).map((d) => d.message), expected.slice(1));
+    await until(async () => {
+      const state = await api.state(uri);
+      return state && JSON.stringify(state.brokenLinks) === JSON.stringify(expected.slice(1)) ? state : null;
+    }, 'the underline of the created file to go away');
+    assert.strictEqual(document.isDirty, false, 'checking links must not dirty the document');
+
+    // Editing a link re-checks it.
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(uri, found[3].range, '[here](#links)');
+    assert.ok(await vscode.workspace.applyEdit(edit));
+    await until(() => linkProblems(uri).length === expected.length - 2, 'the fixed link to stop being reported');
+    const state = await until(async () => {
+      const s = await api.state(uri);
+      return s && s.brokenLinks.length === expected.length - 2 ? s : null;
+    }, 'the fixed link to lose its underline');
+    assert.deepStrictEqual(state.problems, []);
+
+    await vscode.commands.executeCommand('workbench.action.files.revert');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await until(() => linkProblems(uri).length === 0, 'the diagnostics to be cleared when the document closes');
+  });
+
+  test('answers which link targets are missing, and why', async () => {
+    fs.writeFileSync(path.join(dir, 'notes', 'With space & (1).md'), '# Twice\n\n## Twice\n\nSetext heading\n---\n\n<a name="legacy"></a>\n');
+    const { uri } = await open('features.md');
+    const targets = [
+      { path: 'notes/other.md', anchor: '' },
+      { path: 'notes', anchor: '' },
+      { path: 'notes/nope.md', anchor: '' },
+      { path: '../' + path.basename(dir) + '/plain.md', anchor: '' },
+      // Outside a workspace folder a leading slash resolves from the document's folder, as when opening the link.
+      { path: '/notes/other.md', anchor: 'other-note' },
+      { path: 'notes/other.md', anchor: 'Other Note' },
+      { path: 'notes/other.md', anchor: 'other-notes' },
+      { path: 'notes/other.md', anchor: 'something-else-entirely' },
+      { path: 'notes/With space & (1).md', anchor: 'twice-1' },
+      { path: 'notes/With space & (1).md', anchor: 'twice-2' },
+      { path: 'notes/With space & (1).md', anchor: 'setext-heading' },
+      { path: 'notes/With space & (1).md', anchor: 'legacy' },
+      // Only Markdown files have headings to check.
+      { path: 'assets/diagram.svg', anchor: 'layer1' },
+    ];
+    assert.deepStrictEqual(await api.checkLinks(uri, targets), [
+      null,
+      null,
+      { reason: 'file' },
+      null,
+      null,
+      null,
+      { reason: 'anchor', suggestion: 'other-note' },
+      { reason: 'anchor', suggestion: undefined },
+      null,
+      { reason: 'anchor', suggestion: 'twice-1' },
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  test('offers the closest heading as a quick fix, also in the plain text editor', async () => {
+    const file = path.join(dir, 'fix.md');
+    fs.writeFileSync(file, '# Set up\r\n\r\nIntro.\r\n\r\nSee [how](#setup) or [the note](notes/other.md#other-nte).\r\n');
+    const uri = vscode.Uri.file(file);
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    assert.strictEqual(api.sessionCount(uri), 0, 'the file is open as plain text');
+    const found = await until(() => {
+      const d = linkProblems(uri);
+      return d.length === 2 ? d : null;
+    }, 'the diagnostics');
+    assert.deepStrictEqual(found.map((d) => [d.message, d.range.start.line, d.range.start.character, d.range.end.character]), [
+      ['No heading "setup" in this document', 4, 4, 17],
+      ['No heading "other-nte" in notes/other.md', 4, 21, 57],
+    ]);
+    for (const [index, title] of [
+      [1, 'Change to "#other-note"'],
+      [0, 'Change to "#set-up"'],
+    ]) {
+      const current = await until(() => {
+        const d = linkProblems(uri);
+        return d.length === index + 1 ? d : null;
+      }, 'the diagnostics after a fix');
+      const action = await until(async () => {
+        const actions = await vscode.commands.executeCommand('vscode.executeCodeActionProvider', uri, current[index].range, vscode.CodeActionKind.QuickFix.value);
+        return (actions || []).find((a) => a.title === title);
+      }, `the quick fix ${title}`);
+      assert.ok(action.edit, 'the quick fix carries its edit');
+      assert.ok(await vscode.workspace.applyEdit(action.edit));
+    }
+    assert.strictEqual(document.getText(), '# Set up\r\n\r\nIntro.\r\n\r\nSee [how](#set-up) or [the note](notes/other.md#other-note).\r\n');
+    await until(() => linkProblems(uri).length === 0, 'the diagnostics to go away');
+  });
+
+  test('stops checking links when the setting is off', async () => {
+    fs.writeFileSync(path.join(dir, 'off.md'), 'A [broken link](nowhere.md).\n');
+    const { uri } = await open('off.md');
+    const config = vscode.workspace.getConfiguration('seamlessMarkdown');
+    const underlined = async (count) =>
+      until(async () => {
+        const state = await api.state(uri);
+        return state && state.brokenLinks.length === count && linkProblems(uri).length === count;
+      }, `${count} broken link(s) in the editor and the Problems panel`);
+    await underlined(1);
+    try {
+      await config.update('checkLinks', false, vscode.ConfigurationTarget.Global);
+      await underlined(0);
+    } finally {
+      await config.update('checkLinks', undefined, vscode.ConfigurationTarget.Global);
+    }
+    await underlined(1);
   });
 
   test('can hand the file back to the plain text editor', async () => {

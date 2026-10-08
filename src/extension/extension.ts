@@ -209,6 +209,7 @@ export function activate(context: vscode.ExtensionContext): unknown {
     saveImage: async (uri: vscode.Uri, name: string, base64: string) => saveImage((await only(uri)).document, name, base64),
     listFiles: async (uri: vscode.Uri, imagesOnly: boolean) => listFiles((await only(uri)).document, imagesOnly),
     resolveUris: async (uri: vscode.Uri, uris: string[]) => resolveUris((await only(uri)).document, uris),
+    checkLinks: async (uri: vscode.Uri, targets: { path: string; anchor: string }[]) => provider.links.check(uri, targets),
   } satisfies Record<string, (uri: vscode.Uri, ...rest: any[]) => unknown>;
 }
 

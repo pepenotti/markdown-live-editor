@@ -2,6 +2,8 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import {
+  type CheckLinksPayload,
+  type CheckLinksResult,
   type CommandId,
   type EditorConfig,
   type HostMessage,
@@ -16,6 +18,7 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { LinkChecker } from './linkCheck';
 
 export interface Stats {
   words: number;
@@ -36,6 +39,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     customCss: c.get<string>('customCss', ''),
+    checkLinks: c.get<boolean>('checkLinks', true),
   };
 }
 
@@ -191,6 +195,12 @@ export class Session implements SyncTarget {
           data = { items: await resolveUris(this.document, Array.isArray(uris) ? uris.map(String) : []) };
           break;
         }
+        case 'checkLinks': {
+          const targets = (payload as CheckLinksPayload)?.targets;
+          const wanted = Array.isArray(targets) ? targets.map((t) => ({ path: String(t?.path ?? ''), anchor: String(t?.anchor ?? '') })) : [];
+          data = { issues: await this.provider.links.check(this.document.uri, wanted) } satisfies CheckLinksResult;
+          break;
+        }
         default:
           throw new Error(`Unknown request: ${kind}`);
       }
@@ -299,9 +309,14 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   /** Fires when the active session, its mode, focus or statistics change. */
   readonly onDidChange = this.changed.event;
   private readonly channel = vscode.window.createOutputChannel('Seamless Markdown');
+  /** Looks at the file system for broken links and publishes them as diagnostics. */
+  readonly links: LinkChecker;
 
   constructor(readonly context: vscode.ExtensionContext) {
-    context.subscriptions.push(this.changed, this.channel);
+    this.links = new LinkChecker(() => {
+      for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
+    });
+    context.subscriptions.push(this.changed, this.channel, this.links);
   }
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
