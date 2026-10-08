@@ -5,7 +5,8 @@ import { minimalDiff } from '../../shared/textUtil';
 import { renderConfig } from '../config';
 import { renderInline } from '../inlineRender';
 import { bypassGuard, revealBlock } from '../modes';
-import { type Align, applyOp, parseTable, serializeTable, setCell, type TableModel, type TableOp } from '../table/model';
+import { type Align, applyOp, parseTable, serializeTable, setCell, type TableModel, type TableOp, tableToTSV } from '../table/model';
+import { copyText } from './simple';
 
 interface CellRef {
   r: number;
@@ -85,25 +86,142 @@ export function focusTableAt(view: EditorView, pos: number, where: 'first' | 'la
   return false;
 }
 
-const TOOLS: { label: string; title: string; run: (t: TableController, at: CellRef) => void; group?: boolean; danger?: boolean }[] = [
-  { label: '↑+', title: 'Insert row above', run: (t, at) => t.op({ op: 'insertRow', at: Math.max(1, at.r) }, { r: Math.max(1, at.r), c: at.c }) },
-  { label: '↓+', title: 'Insert row below', run: (t, at) => t.op({ op: 'insertRow', at: at.r + 1 }, { r: at.r + 1, c: at.c }) },
-  { label: '↑', title: 'Move row up (Alt+Up)', run: (t, at) => t.op({ op: 'moveRow', row: at.r, by: -1 }, { r: at.r - 1, c: at.c }) },
-  { label: '↓', title: 'Move row down (Alt+Down)', run: (t, at) => t.op({ op: 'moveRow', row: at.r, by: 1 }, { r: at.r + 1, c: at.c }) },
-  { label: 'Delete', danger: true, title: 'Delete this row (Mod+Shift+Backspace). The header row cannot be deleted.', run: (t, at) => t.deleteRow(at) },
-  { label: '←+', title: 'Insert column left', group: true, run: (t, at) => t.op({ op: 'insertCol', at: at.c }, at) },
-  { label: '→+', title: 'Insert column right', run: (t, at) => t.op({ op: 'insertCol', at: at.c + 1 }, { r: at.r, c: at.c + 1 }) },
-  { label: '←', title: 'Move column left', run: (t, at) => t.op({ op: 'moveCol', col: at.c, by: -1 }, { r: at.r, c: at.c - 1 }) },
-  { label: '→', title: 'Move column right', run: (t, at) => t.op({ op: 'moveCol', col: at.c, by: 1 }, { r: at.r, c: at.c + 1 }) },
-  { label: 'Delete', danger: true, title: 'Delete this column (Mod+Alt+Backspace)', run: (t, at) => t.deleteCol(at) },
-  { label: '⇤', title: 'Align column left', group: true, run: (t, at) => t.align(at, 'left') },
-  { label: '↔', title: 'Align column centre', run: (t, at) => t.align(at, 'center') },
-  { label: '⇥', title: 'Align column right', run: (t, at) => t.align(at, 'right') },
-  { label: '</>', title: 'Edit this table as Markdown source', group: true, run: (t) => t.editSource() },
+/** One thing that can be done to the table from the focused cell. The tool bar, the menu and the keyboard all run these. */
+interface Action {
+  title: string;
+  run: (t: TableController, at: CellRef) => void;
+  /** Absent means always possible. */
+  enabled?: (t: TableController, at: CellRef) => boolean;
+  danger?: boolean;
+  /** For actions that set a state, such as alignment: whether that state is the current one. */
+  on?: (t: TableController, at: CellRef) => boolean;
+}
+
+const ACTIONS = {
+  rowAbove: { title: 'Insert row above', run: (t, at) => t.op({ op: 'insertRow', at: Math.max(1, at.r) }, { r: Math.max(1, at.r), c: at.c }) },
+  rowBelow: { title: 'Insert row below', run: (t, at) => t.op({ op: 'insertRow', at: at.r + 1 }, { r: at.r + 1, c: at.c }) },
+  rowUp: { title: 'Move row up (Alt+Up)', enabled: (_t, at) => at.r > 1, run: (t, at) => t.op({ op: 'moveRow', row: at.r, by: -1 }, { r: at.r - 1, c: at.c }) },
+  rowDown: {
+    title: 'Move row down (Alt+Down)',
+    enabled: (t, at) => at.r >= 1 && at.r < t.rowCount - 1,
+    run: (t, at) => t.op({ op: 'moveRow', row: at.r, by: 1 }, { r: at.r + 1, c: at.c }),
+  },
+  rowDuplicate: {
+    title: 'Duplicate this row (Mod+Shift+D). The header row cannot be duplicated.',
+    enabled: (_t, at) => at.r >= 1,
+    run: (t, at) => t.op({ op: 'duplicateRow', row: at.r }, { r: at.r + 1, c: at.c }),
+  },
+  rowClear: { title: 'Empty every cell of this row', run: (t, at) => t.op({ op: 'clearRow', row: at.r }, at) },
+  rowDelete: {
+    title: 'Delete this row (Mod+Shift+Backspace). The header row cannot be deleted.',
+    danger: true,
+    enabled: (_t, at) => at.r >= 1,
+    run: (t, at) => t.deleteRow(at),
+  },
+  colLeft: { title: 'Insert column left', run: (t, at) => t.op({ op: 'insertCol', at: at.c }, at) },
+  colRight: { title: 'Insert column right', run: (t, at) => t.op({ op: 'insertCol', at: at.c + 1 }, { r: at.r, c: at.c + 1 }) },
+  colMoveLeft: { title: 'Move column left', enabled: (_t, at) => at.c > 0, run: (t, at) => t.op({ op: 'moveCol', col: at.c, by: -1 }, { r: at.r, c: at.c - 1 }) },
+  colMoveRight: {
+    title: 'Move column right',
+    enabled: (t, at) => at.c < t.colCount - 1,
+    run: (t, at) => t.op({ op: 'moveCol', col: at.c, by: 1 }, { r: at.r, c: at.c + 1 }),
+  },
+  colClear: { title: 'Empty every cell of this column below the header', run: (t, at) => t.op({ op: 'clearCol', col: at.c }, at) },
+  colDelete: { title: 'Delete this column (Mod+Alt+Backspace)', danger: true, enabled: (t) => t.colCount > 1, run: (t, at) => t.deleteCol(at) },
+  sortAsc: { title: 'Sort rows by this column, ascending', enabled: (t) => t.rowCount > 2, run: (t, at) => t.sort(at, 'asc') },
+  sortDesc: { title: 'Sort rows by this column, descending', enabled: (t) => t.rowCount > 2, run: (t, at) => t.sort(at, 'desc') },
+  alignLeft: { title: 'Align column left', on: (t, at) => t.alignOf(at) === 'left', run: (t, at) => t.align(at, 'left') },
+  alignCenter: { title: 'Align column centre', on: (t, at) => t.alignOf(at) === 'center', run: (t, at) => t.align(at, 'center') },
+  alignRight: { title: 'Align column right', on: (t, at) => t.alignOf(at) === 'right', run: (t, at) => t.align(at, 'right') },
+  copyMarkdown: { title: 'Copy this table as Markdown', run: (t, at) => t.copy(at, 'markdown') },
+  copyTSV: { title: 'Copy this table as tab-separated text, for a spreadsheet', run: (t, at) => t.copy(at, 'tsv') },
+  source: { title: 'Edit this table as Markdown source', run: (t) => t.editSource() },
+} satisfies Record<string, Action>;
+
+type ActionId = keyof typeof ACTIONS;
+
+/**
+ * The bar above the table. `keep` says how long a button stays when the editor gets
+ * narrow: 0 goes first, 2 goes last. Everything is always in the "…" menu.
+ */
+const TOOL_GROUPS: { name: string; tools: { id: ActionId; label: string; keep: 0 | 1 | 2 }[] }[] = [
+  {
+    name: 'Row',
+    tools: [
+      { id: 'rowAbove', label: '↑+', keep: 1 },
+      { id: 'rowBelow', label: '↓+', keep: 2 },
+      { id: 'rowUp', label: '↑', keep: 1 },
+      { id: 'rowDown', label: '↓', keep: 1 },
+      { id: 'rowDuplicate', label: '⧉', keep: 0 },
+      { id: 'rowDelete', label: 'Delete', keep: 2 },
+    ],
+  },
+  {
+    name: 'Column',
+    tools: [
+      { id: 'colLeft', label: '←+', keep: 1 },
+      { id: 'colRight', label: '→+', keep: 2 },
+      { id: 'colMoveLeft', label: '←', keep: 0 },
+      { id: 'colMoveRight', label: '→', keep: 0 },
+      { id: 'colDelete', label: 'Delete', keep: 2 },
+    ],
+  },
+  {
+    name: 'Sort',
+    tools: [
+      { id: 'sortAsc', label: 'A→Z', keep: 1 },
+      { id: 'sortDesc', label: 'Z→A', keep: 1 },
+    ],
+  },
+  {
+    name: 'Align',
+    tools: [
+      { id: 'alignLeft', label: '⇤', keep: 0 },
+      { id: 'alignCenter', label: '↔', keep: 0 },
+      { id: 'alignRight', label: '⇥', keep: 0 },
+    ],
+  },
+  { name: '', tools: [{ id: 'source', label: '</>', keep: 1 }] },
 ];
 
-const TOOL_GROUPS = ['Row', 'Column', 'Align', ''];
-const MOD = /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl';
+/** The menu shown by a right-click in a cell and by the "…" button. `null` is a divider. */
+const MENU: ({ label?: string; items: { id: ActionId; label: string; hint?: string }[] } | null)[] = [
+  { label: 'Insert row', items: [{ id: 'rowAbove', label: 'Above' }, { id: 'rowBelow', label: 'Below' }] },
+  { label: 'Move row', items: [{ id: 'rowUp', label: 'Up' }, { id: 'rowDown', label: 'Down' }] },
+  { items: [{ id: 'rowDuplicate', label: 'Duplicate row', hint: 'Mod+Shift+D' }] },
+  { items: [{ id: 'rowClear', label: 'Clear row' }] },
+  { items: [{ id: 'rowDelete', label: 'Delete row', hint: 'Mod+Shift+Backspace' }] },
+  null,
+  { label: 'Insert column', items: [{ id: 'colLeft', label: 'Left' }, { id: 'colRight', label: 'Right' }] },
+  { label: 'Move column', items: [{ id: 'colMoveLeft', label: 'Left' }, { id: 'colMoveRight', label: 'Right' }] },
+  { items: [{ id: 'colClear', label: 'Clear column' }] },
+  { items: [{ id: 'colDelete', label: 'Delete column', hint: 'Mod+Alt+Backspace' }] },
+  null,
+  { label: 'Sort by column', items: [{ id: 'sortAsc', label: 'A → Z' }, { id: 'sortDesc', label: 'Z → A' }] },
+  { label: 'Align column', items: [{ id: 'alignLeft', label: 'Left' }, { id: 'alignCenter', label: 'Centre' }, { id: 'alignRight', label: 'Right' }] },
+  null,
+  { label: 'Copy table as', items: [{ id: 'copyMarkdown', label: 'Markdown' }, { id: 'copyTSV', label: 'TSV' }] },
+  { items: [{ id: 'source', label: 'Edit as Markdown source' }] },
+];
+
+const IS_MAC = /Mac/.test(navigator.platform);
+const MOD = IS_MAC ? 'Cmd' : 'Ctrl';
+/** Writes a shortcut the way the platform does: `Mod+Shift+D` is `⇧⌘D` on a Mac and `Ctrl+Shift+D` elsewhere. */
+function shortcut(keys: string): string {
+  if (!IS_MAC) return keys.replace(/Mod/g, 'Ctrl');
+  const glyph: Record<string, string> = { Mod: '⌘', Shift: '⇧', Alt: '⌥', Backspace: '⌫' };
+  const parts = keys.split('+');
+  const key = parts.pop()!;
+  const order = ['Alt', 'Shift', 'Mod'];
+  return [...parts].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((k) => glyph[k] ?? k).join('') + (glyph[key] ?? key);
+}
+
+/** The open table menu, if any. There is at most one in the whole editor. */
+let openMenu: { el: HTMLElement; owner: TableController; anchor: HTMLElement | null; rows: HTMLElement[][]; at: [number, number] | null; close: () => void } | null = null;
+
+function closeMenu(): void {
+  openMenu?.close();
+}
 
 class TableController {
   private widget: TableWidget;
@@ -111,6 +229,8 @@ class TableController {
   private rebuilding = false;
   private pendingFocus: CellRef | null = null;
   private body!: HTMLTableElement;
+  private tools!: HTMLElement;
+  private readonly resize: ResizeObserver | null;
 
   constructor(
     private readonly dom: HTMLElement,
@@ -125,14 +245,31 @@ class TableController {
     dom.addEventListener('input', (e) => this.onInput(e));
     dom.addEventListener('keydown', (e) => this.onKeyDown(e));
     dom.addEventListener('paste', (e) => this.onPaste(e));
+    dom.addEventListener('contextmenu', (e) => this.onContextMenu(e));
+    this.resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.fitTools());
+    this.resize?.observe(dom);
   }
 
   destroy(): void {
     if (editingCell && this.dom.contains(editingCell)) editingCell = null;
+    if (openMenu?.owner === this) closeMenu();
+    this.resize?.disconnect();
   }
 
   private get model(): TableModel {
     return this.widget.model!;
+  }
+
+  get rowCount(): number {
+    return this.model.rows.length;
+  }
+
+  get colCount(): number {
+    return this.model.align.length;
+  }
+
+  alignOf(at: CellRef): Align {
+    return this.model.align[at.c] ?? null;
   }
 
   private get padCells(): boolean {
@@ -148,34 +285,50 @@ class TableController {
 
     const tools = document.createElement('div');
     tools.className = 'cm-md-table-tools';
-    let group = 0;
-    const addLabel = () => {
-      if (!TOOL_GROUPS[group]) return;
-      const label = document.createElement('span');
-      label.className = 'cm-md-table-tools-label';
-      label.textContent = TOOL_GROUPS[group];
-      tools.append(label);
-    };
-    addLabel();
-    for (const tool of TOOLS) {
-      if (tool.group) {
-        const sep = document.createElement('span');
-        sep.className = 'cm-md-table-tools-sep';
-        tools.append(sep);
-        group++;
-        addLabel();
-      }
+    tools.setAttribute('role', 'toolbar');
+    tools.setAttribute('aria-label', 'Table');
+    const button = (label: string, title: string, run: (b: HTMLButtonElement) => void) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = tool.label;
-      if (tool.danger) b.className = 'cm-md-table-danger';
-      b.title = tool.title.replace(/Mod/g, MOD);
-      b.setAttribute('aria-label', tool.title);
+      b.textContent = label;
+      b.title = title.replace(/Mod/g, MOD);
+      b.setAttribute('aria-label', title.replace(/Mod/g, MOD));
       b.tabIndex = -1;
+      // Keep the focus in the cell.
       b.addEventListener('mousedown', (e) => e.preventDefault());
-      b.addEventListener('click', () => tool.run(this, this.active ?? { r: this.model.rows.length - 1, c: 0 }));
-      tools.append(b);
+      b.addEventListener('click', () => run(b));
+      return b;
+    };
+    for (const group of TOOL_GROUPS) {
+      const span = document.createElement('span');
+      span.className = 'cm-md-table-tools-group';
+      if (group.name) {
+        const label = document.createElement('span');
+        label.className = 'cm-md-table-tools-label';
+        label.textContent = group.name;
+        span.append(label);
+      }
+      for (const tool of group.tools) {
+        const action: Action = ACTIONS[tool.id];
+        const b = button(tool.label, action.title, () => this.run(tool.id, this.current()));
+        if (action.danger) b.className = 'cm-md-table-danger';
+        b.dataset.action = tool.id;
+        b.dataset.keep = String(tool.keep);
+        span.append(b);
+      }
+      tools.append(span);
     }
+    const more = document.createElement('span');
+    more.className = 'cm-md-table-tools-group';
+    const moreButton = button('…', 'More table actions (also on right-click)', (b) => {
+      if (openMenu?.owner === this && openMenu.anchor === b) closeMenu();
+      else this.showMenu(this.current(), b);
+    });
+    moreButton.classList.add('cm-md-table-more');
+    moreButton.setAttribute('aria-haspopup', 'menu');
+    more.append(moreButton);
+    tools.append(more);
+    this.tools = tools;
 
     const scroller = document.createElement('div');
     scroller.className = 'cm-md-table-scroll';
@@ -208,9 +361,203 @@ class TableController {
     const target = this.pendingFocus ?? (hadFocus ? this.active : null);
     this.pendingFocus = null;
     if (target) this.focusCell(target.r, target.c, 'end');
+    this.fitTools();
+  }
+
+  /** The cell the tool bar acts on. */
+  private current(): CellRef {
+    return this.active ?? { r: this.model.rows.length - 1, c: 0 };
+  }
+
+  private can(id: ActionId, at: CellRef): boolean {
+    const action: Action = ACTIONS[id];
+    return !action.enabled || action.enabled(this, at);
+  }
+
+  private run(id: ActionId, at: CellRef): void {
+    if (this.can(id, at)) ACTIONS[id].run(this, at);
+  }
+
+  /**
+   * Hides the less used buttons, a step at a time, until the bar fits the editor's width.
+   * The hidden actions stay reachable through the "…" button.
+   */
+  private fitTools(): void {
+    if (!this.dom.classList.contains('cm-md-table-active')) return;
+    const style = getComputedStyle(this.dom);
+    const room = this.dom.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const groups = [...this.tools.children] as HTMLElement[];
+    for (let level = 0; level <= 3; level++) {
+      for (const group of groups) {
+        let shown = 0;
+        for (const b of group.querySelectorAll<HTMLElement>('button')) {
+          b.hidden = b.dataset.keep !== undefined && Number(b.dataset.keep) < level;
+          if (!b.hidden) shown++;
+        }
+        group.hidden = shown === 0;
+      }
+      if (this.tools.offsetWidth <= room) break;
+    }
+    this.markTools();
+  }
+
+  /** Greys out the buttons that do nothing for the focused cell and marks the column's alignment. */
+  private markTools(): void {
+    const at = this.current();
+    for (const b of this.tools.querySelectorAll<HTMLElement>('button[data-action]')) {
+      const id = b.dataset.action as ActionId;
+      const action: Action = ACTIONS[id];
+      b.setAttribute('aria-disabled', String(!this.can(id, at)));
+      if (action.on) b.setAttribute('aria-pressed', String(action.on(this, at)));
+    }
+  }
+
+  /* ---------- menu ---------- */
+
+  /** Opens the table menu for a cell, under `anchor` or at a point of the window. */
+  private showMenu(at: CellRef, anchor: HTMLElement | { x: number; y: number }): void {
+    closeMenu();
+    const el = document.createElement('div');
+    el.className = 'cm-md-table-menu';
+    el.setAttribute('role', 'menu');
+    el.setAttribute('aria-label', 'Table');
+    const rows: HTMLElement[][] = [];
+    for (const entry of MENU) {
+      if (!entry) {
+        const sep = document.createElement('div');
+        sep.className = 'cm-md-table-menu-sep';
+        el.append(sep);
+        continue;
+      }
+      const row = document.createElement('div');
+      row.className = 'cm-md-table-menu-row';
+      if (entry.label) {
+        const label = document.createElement('span');
+        label.className = 'cm-md-table-menu-label';
+        label.textContent = entry.label;
+        row.append(label);
+      }
+      const usable: HTMLElement[] = [];
+      for (const item of entry.items) {
+        const action: Action = ACTIONS[item.id];
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.tabIndex = -1;
+        b.setAttribute('role', 'menuitem');
+        b.dataset.action = item.id;
+        b.title = action.title.replace(/Mod/g, MOD);
+        const text = document.createElement('span');
+        text.textContent = item.label;
+        b.append(text);
+        if (item.hint) {
+          const hint = document.createElement('span');
+          hint.className = 'cm-md-table-menu-hint';
+          hint.textContent = shortcut(item.hint);
+          b.append(hint);
+        }
+        if (!entry.label) b.classList.add('cm-md-table-menu-wide');
+        if (action.danger) b.classList.add('cm-md-table-danger');
+        if (action.on?.(this, at)) b.setAttribute('aria-checked', 'true');
+        const enabled = this.can(item.id, at);
+        b.setAttribute('aria-disabled', String(!enabled));
+        if (enabled) usable.push(b);
+        b.addEventListener('click', () => {
+          if (!enabled) return;
+          closeMenu();
+          this.run(item.id, at);
+        });
+        row.append(b);
+      }
+      if (usable.length) rows.push(usable);
+      el.append(row);
+    }
+    // Clicks in the menu must not take the focus out of the cell, and the menu has no menu of its own.
+    el.addEventListener('mousedown', (e) => e.preventDefault());
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    const button = anchor instanceof HTMLElement ? anchor : null;
+    const outside = (e: Event) => {
+      const target = e.target as Node | null;
+      if (el.contains(target)) return;
+      // The "…" button closes its own menu when it is clicked again.
+      if (button && button.contains(target)) return;
+      closeMenu();
+    };
+    const dismiss = () => closeMenu();
+    const scroller = this.view.scrollDOM;
+    document.addEventListener('pointerdown', outside, true);
+    scroller.addEventListener('scroll', dismiss, { passive: true });
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('blur', dismiss);
+    button?.setAttribute('aria-expanded', 'true');
+    openMenu = {
+      el,
+      owner: this,
+      anchor: button,
+      rows,
+      at: null,
+      close: () => {
+        document.removeEventListener('pointerdown', outside, true);
+        scroller.removeEventListener('scroll', dismiss);
+        window.removeEventListener('resize', dismiss);
+        window.removeEventListener('blur', dismiss);
+        button?.removeAttribute('aria-expanded');
+        el.remove();
+        openMenu = null;
+      },
+    };
+
+    this.view.dom.append(el);
+    // Keep the whole menu inside the window.
+    const margin = 6;
+    const box = button?.getBoundingClientRect();
+    let x = box ? box.right - el.offsetWidth : (anchor as { x: number }).x;
+    let y = box ? box.bottom + 2 : (anchor as { y: number }).y;
+    x = Math.max(margin, Math.min(x, window.innerWidth - el.offsetWidth - margin));
+    if (y + el.offsetHeight + margin > window.innerHeight) y = Math.max(margin, window.innerHeight - el.offsetHeight - margin);
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }
+
+  /** Moves the highlighted menu entry: `dr` between lines, `dc` along a line. */
+  private stepMenu(dr: number, dc: number): void {
+    const menu = openMenu;
+    if (!menu || !menu.rows.length) return;
+    let r: number;
+    let c: number;
+    if (!menu.at) {
+      r = dr < 0 ? menu.rows.length - 1 : 0;
+      c = 0;
+    } else {
+      r = (menu.at[0] + dr + menu.rows.length) % menu.rows.length;
+      const line = menu.rows[r];
+      c = dr ? Math.min(menu.at[1], line.length - 1) : (menu.at[1] + dc + line.length) % line.length;
+    }
+    menu.el.querySelector('.cm-md-table-menu-current')?.classList.remove('cm-md-table-menu-current');
+    menu.at = [r, c];
+    menu.rows[r][c].classList.add('cm-md-table-menu-current');
+    menu.rows[r][c].scrollIntoView({ block: 'nearest' });
+  }
+
+  private onContextMenu(e: MouseEvent): void {
+    const hit = e.target instanceof HTMLElement ? e.target : null;
+    const cell = this.cellOf(hit) ?? (hit?.closest('td,th')?.firstElementChild as HTMLElement | null | undefined) ?? null;
+    if (!cell || !this.body.contains(cell)) return;
+    // With text selected in the cell, leave the usual menu (cut, copy, paste) alone.
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.anchorNode && cell.contains(sel.anchorNode) && document.activeElement === cell) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const at = this.ref(cell);
+    if (document.activeElement !== cell) this.focusCell(at.r, at.c, 'end');
+    // The keyboard's menu key reports no useful point: open under the cell instead.
+    const box = cell.getBoundingClientRect();
+    const inside = e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
+    this.showMenu(at, inside ? { x: e.clientX, y: e.clientY } : { x: box.left, y: box.bottom });
   }
 
   update(next: TableWidget): void {
+    if (openMenu?.owner === this) closeMenu();
     const prev = this.widget.model!;
     this.widget = next;
     const model = next.model!;
@@ -239,6 +586,7 @@ class TableController {
       this.pendingFocus = null;
       this.focusCell(f.r, f.c, 'end');
     }
+    this.markTools();
   }
 
   private setAlign(td: HTMLElement, align: Align): void {
@@ -315,7 +663,10 @@ class TableController {
     this.edit(cell);
     editingCell = cell;
     this.active = this.ref(cell);
+    const shown = this.dom.classList.contains('cm-md-table-active');
     this.dom.classList.add('cm-md-table-active');
+    if (shown) this.markTools();
+    else this.fitTools();
   }
 
   private onFocusOut(e: FocusEvent): void {
@@ -324,7 +675,10 @@ class TableController {
     if (!cell || !cell.isConnected) return;
     if (editingCell === cell) editingCell = null;
     this.show(cell, cell.dataset.value ?? '');
-    if (!this.dom.contains(e.relatedTarget as Node | null)) this.dom.classList.remove('cm-md-table-active');
+    if (!this.dom.contains(e.relatedTarget as Node | null)) {
+      this.dom.classList.remove('cm-md-table-active');
+      if (openMenu?.owner === this) closeMenu();
+    }
   }
 
   private onInput(e: Event): void {
@@ -351,7 +705,28 @@ class TableController {
       e.stopPropagation();
     };
 
-    if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey) && (e.shiftKey || e.altKey)) {
+    if (openMenu?.owner === this) {
+      const step: Record<string, [number, number]> = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] };
+      if (e.key in step && plain) {
+        handled();
+        this.stepMenu(...step[e.key]);
+        return;
+      }
+      if (e.key === 'Escape' || e.key === 'Tab' || (e.key === 'Enter' && plain)) {
+        handled();
+        const menu = openMenu;
+        const picked = e.key === 'Enter' && menu.at ? menu.rows[menu.at[0]][menu.at[1]] : null;
+        if (picked) picked.click();
+        else closeMenu();
+        return;
+      }
+      closeMenu();
+    }
+
+    if (e.key.toLowerCase() === 'd' && (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey) {
+      handled();
+      this.run('rowDuplicate', { r, c });
+    } else if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey) && (e.shiftKey || e.altKey)) {
       handled();
       if (e.altKey) this.deleteCol({ r, c });
       else this.deleteRow({ r, c });
@@ -452,6 +827,24 @@ class TableController {
     if (!model || !applyOp(model, op)) return;
     this.pendingFocus = focus ?? null;
     this.replaceSource(serializeTable(model, this.padCells), 'input.table');
+  }
+
+  /** Sorts the body rows by the column of `at` and keeps the focus on the row it was in. */
+  sort(at: CellRef, dir: 'asc' | 'desc'): void {
+    const model = parseTable(this.widget.source);
+    if (!model) return;
+    const row = model.rows[at.r];
+    if (!applyOp(model, { op: 'sort', col: at.c, dir })) return;
+    this.pendingFocus = { r: Math.max(0, model.rows.indexOf(row)), c: at.c };
+    this.replaceSource(serializeTable(model, this.padCells), 'input.table');
+  }
+
+  copy(at: CellRef, as: 'markdown' | 'tsv'): void {
+    const text = as === 'tsv' ? tableToTSV(this.model) : this.widget.source;
+    void copyText(text).then(() => {
+      // The fallback for a missing clipboard API borrows the focus.
+      if (this.dom.isConnected && !this.dom.contains(document.activeElement)) this.focusCell(at.r, at.c, 'end');
+    });
   }
 
   deleteRow(at: CellRef): void {
