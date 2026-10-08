@@ -7,6 +7,8 @@ export interface Ui {
   info(message: string, ...actions: string[]): Thenable<string | undefined>;
   error(message: string, ...actions: string[]): Thenable<string | undefined>;
   progress<T>(title: string, work: () => Promise<T>): Thenable<T>;
+  /** Hands a link to the operating system. Resolves to false when nothing could open it. */
+  open(link: string): Thenable<boolean>;
 }
 
 const real: Ui = {
@@ -14,12 +16,15 @@ const real: Ui = {
   info: (message, ...actions) => vscode.window.showInformationMessage(message, ...actions),
   error: (message, ...actions) => vscode.window.showErrorMessage(message, ...actions),
   progress: (title, work) => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, work),
+  // Given as text on purpose: VS Code then hands the link on exactly as it is, where a Uri
+  // object would be taken apart and put together again with different escaping.
+  open: (link) => vscode.env.openExternal(link as unknown as vscode.Uri),
 };
 
 export const ui: Ui = { ...real };
 
 export interface UiRecord {
-  kind: 'save' | 'info' | 'error' | 'progress';
+  kind: 'save' | 'info' | 'error' | 'progress' | 'open';
   text: string;
   actions: string[];
 }
@@ -31,6 +36,8 @@ export interface UiStub {
   saveAnswers: (vscode.Uri | undefined)[];
   /** Buttons to press on the next notifications that offer them, in order. */
   choices: string[];
+  /** Makes `open` report that nothing could open the link. */
+  openFails: boolean;
   reset(): void;
 }
 
@@ -40,10 +47,12 @@ export function stubUi(): UiStub {
     log: [],
     saveAnswers: [],
     choices: [],
+    openFails: false,
     reset() {
       stub.log.length = 0;
       stub.saveAnswers.length = 0;
       stub.choices.length = 0;
+      stub.openFails = false;
     },
   };
   const notify = (kind: 'info' | 'error') => async (message: string, ...actions: string[]) => {
@@ -57,6 +66,10 @@ export function stubUi(): UiStub {
   };
   ui.info = notify('info');
   ui.error = notify('error');
+  ui.open = async (link) => {
+    stub.log.push({ kind: 'open', text: link, actions: [] });
+    return stub.openFails ? false : true;
+  };
   ui.progress = async (title, work) => {
     stub.log.push({ kind: 'progress', text: title, actions: [] });
     return work();

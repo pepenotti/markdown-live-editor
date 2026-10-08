@@ -65,6 +65,7 @@ const EXPORT_ITEMS: { action: ExportAction; label: string }[] = [
   { action: 'html', label: 'Export as HTML…' },
   { action: 'pdf', label: 'Export as PDF…' },
   { action: 'copyHtml', label: 'Copy as HTML' },
+  { action: 'email', label: 'Email Document…' },
 ];
 
 export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac: boolean, onExport: (action: ExportAction) => void = () => {}): Toolbar {

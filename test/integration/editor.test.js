@@ -794,6 +794,159 @@ suite('Seamless Markdown', () => {
     }
   });
 
+  /* ---------- Email Document ---------- */
+
+  const opened = () => api.shown().filter((entry) => entry.kind === 'open').map((entry) => entry.text);
+  const told = (kind) => api.shown().filter((entry) => entry.kind === kind).map((entry) => entry.text);
+  /** The fields of a mailto link as a mail app reads them. */
+  const mail = (link) => {
+    const [, to, query] = /^mailto:([^?]*)\?(.*)$/.exec(link);
+    return { to, ...Object.fromEntries(query.split('&').map((pair) => pair.split('=').map(decodeURIComponent))) };
+  };
+  /**
+   * A page may only write to the clipboard while it has the keyboard focus, and it cannot
+   * have it while the VS Code window itself is not the focused window (a test run in the
+   * background, a locked screen). Then the command falls back to plain text and says so,
+   * and that is what is checked: both outcomes are real, neither is skipped.
+   */
+  const windowFocused = () => vscode.window.state.focused;
+  const NO_FOCUS = /^Formatted text could not be copied \(the editor does not have the keyboard focus\), so the document was copied as Markdown text instead\. /;
+  function expectCopy(how, extra = '', paste = 'Paste it into the new email.') {
+    if (how === 'formatted') {
+      assert.deepStrictEqual(told('error'), []);
+      assert.deepStrictEqual(told('info'), [`Copied as formatted text. ${paste}${extra}`]);
+      return true;
+    }
+    assert.strictEqual(windowFocused(), false, `formatted copy failed in a focused window: ${JSON.stringify(api.shown())}`);
+    console.log('      NOTE: this VS Code window does not have the focus, so the plain-text fallback and its message were checked instead of the formatted copy');
+    assert.strictEqual(how, 'plain');
+    assert.deepStrictEqual(told('info'), []);
+    assert.strictEqual(told('error').length, 1);
+    assert.match(told('error')[0], NO_FOCUS);
+    return false;
+  }
+  /** What the editor can read back from the clipboard, or null (with the reason printed) where reading is not allowed. */
+  async function richClipboard(uri) {
+    const state = await api.clipboard(uri);
+    if (state && !state.error) return state;
+    console.log(`      NOTE: the HTML on the clipboard could not be read back here (${state ? state.error : 'no answer'}); only the plain text was checked`);
+    return null;
+  }
+
+  test('emails a document from this editor: formatted text on the clipboard and a new message with the subject', async () => {
+    const { uri, document } = await open('features.md');
+    await inStep(uri, document);
+    await vscode.env.clipboard.writeText('');
+    api.resetUi();
+    const how = await vscode.commands.executeCommand('seamlessMarkdown.emailDocument');
+    // The new message: only a subject and a note, nothing of the document.
+    assert.deepStrictEqual(opened(), ['mailto:?subject=Seamless%20Markdown&body=%28Paste%20here%29']);
+    const formatted = expectCopy(how, ' Left out, because a pasted mail cannot carry them: 4 local images.');
+    // The plain flavour is the Markdown itself (and it is all there is after the fallback).
+    assert.strictEqual(lf(await vscode.env.clipboard.readText()), lf(document.getText()));
+    const clipboard = formatted && (await richClipboard(uri));
+    if (clipboard) {
+      assert.ok(clipboard.types.includes('text/html') && clipboard.types.includes('text/plain'), `flavours: ${clipboard.types}`);
+      assert.ok(/<h1 style="[^"]+">Seamless Markdown<\/h1>/.test(clipboard.html), 'headings with inline styles');
+      assert.ok(/<td style="border:\s*1px solid/.test(clipboard.html), 'table cells with borders');
+      assert.ok(/<pre style="[^"]*font-family:\s*ui-monospace/.test(clipboard.html), 'code in a monospace font');
+      assert.ok(clipboard.html.includes('[Image: The pipeline]'), 'local images as their alt text');
+      assert.ok(!/<script|<style| class=/.test(clipboard.html.replace(/<meta[^>]*>/g, '')), 'nothing a mail program drops');
+    }
+    assert.strictEqual(document.isDirty, false);
+    // The editor still has its state and its focus was given back.
+    const state = await inStep(uri, document);
+    assert.deepStrictEqual(state.problems, []);
+  });
+
+  test('emails from the Export menu of the toolbar, with the recipient from the settings and a title that cannot inject', async () => {
+    fs.writeFileSync(path.join(dir, 'inject.md'), '# Plan & budget?cc=x@evil.example&bcc=y@evil.example\nBcc: z@evil.example\n\nText with ```mermaid``` no diagram.\n\n```mermaid\nflowchart LR\n  A --> B\n```\n');
+    const settings = vscode.workspace.getConfiguration('seamlessMarkdown.email');
+    try {
+      await settings.update('to', 'team@example.com, not an address, boss@example.com?bcc=evil@example.com', vscode.ConfigurationTarget.Global);
+      const { uri } = await open('inject.md');
+      api.resetUi();
+      await api.fromWebview(uri, { type: 'export', action: 'email' });
+      await until(() => opened().length === 1, 'the mail app to be opened');
+      const link = opened()[0];
+      assert.ok(!/[\s]/.test(link) && link.length < 300, link);
+      assert.deepStrictEqual(link.match(/[?&]/g), ['?', '&'], 'two fields and no more');
+      assert.deepStrictEqual(mail(link), { to: 'team@example.com', subject: 'Plan & budget?cc=x@evil.example&bcc=y@evil.example', body: '(Paste here)' });
+      await until(() => told('info').length + told('error').length === 1, 'the notification');
+      expectCopy(told('info').length ? 'formatted' : 'plain', ' Left out, because a pasted mail cannot carry it: 1 diagram.');
+    } finally {
+      await settings.update('to', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  test('emails a document whose editor is behind another tab', async () => {
+    const { uri, document } = await open('plain.md');
+    await inStep(uri, document);
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'notes', 'other.md'))), { preview: false });
+    await vscode.env.clipboard.writeText('');
+    api.resetUi();
+    // As from the Explorer: the file is named, and it is not the one in front.
+    const how = await vscode.commands.executeCommand('seamlessMarkdown.emailDocument', uri);
+    assert.deepStrictEqual(opened(), ['mailto:?subject=plain&body=%28Paste%20here%29'], 'the file name is the subject when there is no heading');
+    // The editor was brought to the front to do the copying.
+    assert.strictEqual(vscode.window.tabGroups.activeTabGroup.activeTab.input.viewType, VIEW_TYPE);
+    const formatted = expectCopy(how);
+    assert.strictEqual(lf(await vscode.env.clipboard.readText()), 'First line\n\nSecond paragraph with a word.\n');
+    const clipboard = formatted && (await richClipboard(uri));
+    if (clipboard) assert.ok(/<p style="[^"]+">First line<\/p>/.test(clipboard.html), clipboard.html);
+  });
+
+  test('without an editor of ours, says that only the Markdown text was copied, and still opens the message', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const uri = vscode.Uri.file(path.join(dir, 'notes', 'other.md'));
+    const text = fs.readFileSync(uri.fsPath, 'utf8');
+    for (const fromExplorer of [false, true]) {
+      if (!fromExplorer) await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+      else await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      assert.strictEqual(api.sessionCount(uri), 0);
+      await vscode.env.clipboard.writeText('');
+      api.resetUi();
+      const how = await vscode.commands.executeCommand('seamlessMarkdown.emailDocument', ...(fromExplorer ? [uri] : []));
+      assert.strictEqual(how, 'plain');
+      assert.deepStrictEqual(opened(), ['mailto:?subject=Other%20note&body=%28Paste%20here%29']);
+      assert.strictEqual(lf(await vscode.env.clipboard.readText()), lf(text));
+      const shown = api.shown().filter((entry) => entry.kind === 'info');
+      assert.strictEqual(shown.length, 1);
+      assert.strictEqual(shown[0].text, 'Copied the document as Markdown text, without formatting: formatted text can only be copied from the Seamless Markdown editor. Paste it into the new email.');
+      assert.deepStrictEqual(shown[0].actions, ['Open in Seamless Markdown']);
+    }
+    // The offer in that message opens the file in this editor.
+    api.resetUi();
+    api.choose(undefined, 'Open in Seamless Markdown');
+    await vscode.commands.executeCommand('seamlessMarkdown.emailDocument', uri);
+    await until(() => api.sessionCount(uri) === 1, 'the editor to open');
+  });
+
+  test('says so when there is nothing to email or no mail app, and never opens anything but a mailto link', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    api.resetUi();
+    assert.strictEqual(await vscode.commands.executeCommand('seamlessMarkdown.emailDocument'), undefined);
+    assert.deepStrictEqual(api.shown().map((e) => e.kind), ['info']);
+    assert.match(api.shown()[0].text, /^Open a Markdown file first/);
+
+    const { uri } = await open('plain.md');
+    api.resetUi();
+    api.failToOpen();
+    assert.strictEqual(await vscode.commands.executeCommand('seamlessMarkdown.emailDocument'), undefined, 'no message was opened');
+    assert.strictEqual(opened().length, 1);
+    assert.match(api.shown().filter((e) => e.kind !== 'open')[0].text, /No mail app could be opened; paste it into a new email yourself\./);
+    // Whatever a document is called or contains, the only thing ever opened is a short mailto link.
+    fs.writeFileSync(path.join(dir, 'odd.md'), `# https://evil.example/?x=1 file:///etc/passwd ${'long '.repeat(2000)}\n`);
+    await open('odd.md');
+    api.resetUi();
+    await vscode.commands.executeCommand('seamlessMarkdown.emailDocument');
+    assert.strictEqual(opened().length, 1);
+    assert.match(opened()[0], /^mailto:\?subject=[A-Za-z0-9._~%-]*&body=%28Paste%20here%29$/);
+    assert.ok(opened()[0].length < 700);
+    assert.strictEqual(mail(opened()[0]).subject.length, 120);
+    assert.ok(uri);
+  });
+
   test('builds the outline from the headings', async () => {
     const { uri } = await open('features.md');
     const outline = await api.outline(uri);

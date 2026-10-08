@@ -2,6 +2,7 @@
 // Pure code: nothing here touches VS Code or the file system.
 import katex from 'katex';
 import MarkdownIt, { type MarkdownIt as Markdown, type Token } from 'markdown-it';
+import { EMAIL_WRAPPER, emailFootnotes, emailPlugin, type EmailState } from './emailHtml';
 import { isLocalSource } from './embed';
 import { exportCss } from './exportCss';
 import { katexStyles } from './katexCss';
@@ -25,6 +26,8 @@ export interface RenderOptions {
    * fonts the formulas use. Without them math is MathML, which needs neither.
    */
   katex?: { css: string; font: (name: string) => string | undefined };
+  /** Set by `renderEmail`: the output is for pasting into a mail, and this counts what had to be left out. */
+  email?: EmailState;
   /** Replacement URLs for image sources, keyed by the source as it appears in the rendered HTML. */
   images?: ReadonlyMap<string, string>;
   /**
@@ -222,6 +225,8 @@ function build(): Markdown {
   // The checkbox of a task list is an html_inline token too; it has no image and passes through.
   rules.html_block = (tokens, idx, _options, env) => swapHtmlImages(tokens[idx].content, ours(env).options.images);
   rules.html_inline = (tokens, idx, _options, env) => swapHtmlImages(tokens[idx].content, ours(env).options.images);
+  // Last, because it wraps the rules above.
+  emailPlugin(md, (env) => ours(env).options?.email);
   return md;
 }
 
@@ -265,6 +270,36 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
   const md = renderer();
   const html = md.render(body, env);
   return { html: html + footnoteSection(md, env), title: env.title, diagrams: env.diagrams, diagramsDrawn: env.diagramsDrawn };
+}
+
+export interface EmailRendered {
+  /** One element with inline styles on everything in it, for the `text/html` flavour of the clipboard. */
+  html: string;
+  /** Text of the first heading, or empty. */
+  title: string;
+  /** Local images and diagrams that a mail cannot carry and that were replaced by a note. */
+  omittedImages: number;
+  omittedDiagrams: number;
+}
+
+/**
+ * Renders Markdown for pasting into an email: see src/shared/emailHtml.ts for what that means.
+ * Wiki links are passed as for `renderMarkdown`; in a mail they should resolve to text.
+ */
+export function renderEmail(source: string, options: Pick<RenderOptions, 'wikiLinks'> = {}): EmailRendered {
+  const body = stripFrontMatter(source);
+  const email: EmailState = { images: 0, diagrams: 0 };
+  const env = newEnv({ ...options, email }, source, body);
+  const md = renderer();
+  let html = md.render(body, env);
+  const notes: { number: number; html: string }[] = [];
+  // Rendering the text of a note can number further notes, so the list is read again each round.
+  for (let i = 0; i < footnoteList(env).length; i++) {
+    const note = footnoteList(env)[i];
+    notes.push({ number: note.number, html: md.renderInline(note.text, env) });
+  }
+  html += emailFootnotes(notes);
+  return { html: `<div style="${EMAIL_WRAPPER}">\n${html}</div>\n`, title: env.title, omittedImages: email.images, omittedDiagrams: email.diagrams };
 }
 
 /** The sources of the `mermaid` code blocks of a document, in the order they are rendered. */

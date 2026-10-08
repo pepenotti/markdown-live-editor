@@ -19,6 +19,7 @@ import {
   type WebviewMessage,
   EXPORT_ACTIONS,
   type ExportAction,
+  type RichCopyResult,
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
@@ -186,6 +187,8 @@ export class Session implements SyncTarget {
       case 'flushed':
       case 'debugState':
       case 'selectionState':
+      case 'copied':
+      case 'clipboardState':
         this.waiters.get(message.reqId)?.(message);
         this.waiters.delete(message.reqId);
         break;
@@ -298,6 +301,26 @@ export class Session implements SyncTarget {
     if (!this.ready) return '';
     const reply = await this.ask<{ text: string }>((reqId) => ({ type: 'selectionRequest', reqId }), 1000);
     return reply?.text ?? '';
+  }
+
+  /**
+   * Has the editor put formatted text on the clipboard: only a page can write `text/html`
+   * there, the extension host can write plain text and nothing else. The editor has to be
+   * visible and focused for it, so it is brought to the front first.
+   */
+  async copyRich(html: string, text: string): Promise<RichCopyResult> {
+    if (!this.ready) return { ok: false, error: 'the editor is still loading' };
+    if (!this.panel.active) {
+      this.panel.reveal(undefined, false);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    const reply = await this.ask<{ result: RichCopyResult }>((reqId) => ({ type: 'copyRich', reqId, html, text }), 4000);
+    return reply?.result ?? { ok: false, error: 'the editor did not answer' };
+  }
+
+  /** What the editor reads from the clipboard (for the tests). */
+  debugClipboard(): Promise<Extract<WebviewMessage, { type: 'clipboardState' }> | undefined> {
+    return this.ask((reqId) => ({ type: 'debugClipboard', reqId }), 4000);
   }
 
   revealAnchor(anchor: string): void {

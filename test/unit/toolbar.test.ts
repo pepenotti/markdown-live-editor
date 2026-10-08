@@ -16,14 +16,14 @@ describe('the Export menu of the toolbar', () => {
     return { asked, toolbar, button, menu, item };
   }
 
-  it('offers the three actions and tells the host which one was chosen', () => {
+  it('offers the four actions and tells the host which one was chosen', () => {
     const { asked, toolbar, button, menu, item } = setUp();
     toolbar.setExport(true, '');
     expect(button.textContent).toBe('Export');
     expect(menu()).toBeNull();
     button.click();
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect([...menu()!.querySelectorAll('[role=menuitem] > span')].map((e) => e.textContent)).toEqual(['Export as HTML…', 'Export as PDF…', 'Copy as HTML']);
+    expect([...menu()!.querySelectorAll('[role=menuitem] > span')].map((e) => e.textContent)).toEqual(['Export as HTML…', 'Export as PDF…', 'Copy as HTML', 'Email Document…']);
     item('html').click();
     expect(asked).toEqual(['html']);
     // Choosing closes the menu.
@@ -33,7 +33,9 @@ describe('the Export menu of the toolbar', () => {
     item('pdf').click();
     button.click();
     item('copyHtml').click();
-    expect(asked).toEqual(['html', 'pdf', 'copyHtml']);
+    button.click();
+    item('email').click();
+    expect(asked).toEqual(['html', 'pdf', 'copyHtml', 'email']);
   });
 
   it('shows the PDF entry disabled with the reason while no browser can print', () => {
