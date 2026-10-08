@@ -105,7 +105,8 @@ suite('Seamless Markdown', () => {
     const original = document.getText();
     await api.command(uri, 'heading', 2);
     await until(() => document.getText() === '## ' + original, 'the heading to reach the document');
-    assert.strictEqual(document.isDirty, true);
+    // The dirty flag reaches the extension host in a message of its own, just after the text.
+    await until(() => document.isDirty, 'the document to be marked as changed');
     await inStep(uri, document);
 
     await vscode.commands.executeCommand('seamlessMarkdown.undo');
