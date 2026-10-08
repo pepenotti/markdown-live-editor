@@ -58,7 +58,8 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Images**: shown inline, with relative paths resolved from the document. Paste an image from the clipboard or drop one in and it is saved to an `assets` folder next to the document and linked. Dragging a file from the Explorer links it without copying (hold `Shift` while dropping, as VS Code requires). File paths are completed as you type the target of a link or image.
 - **Math**: `$x^2$` inline and `$$` blocks, drawn with KaTeX. A price such as $5 is left alone.
 - **Mermaid diagrams**: a `mermaid` code block is drawn as a diagram. Click a diagram or formula block, or move into it with the arrow keys, to edit its source with the result shown underneath.
-- **Slash menu**: type `/` at the start of a line to insert a heading, list, quote, code block, table, image, link or divider.
+- **Slash menu**: type `/` at the start of a line to insert a heading, list, quote, code block, table, image, link, divider or table of contents.
+- **Table of contents**: *Insert Table of Contents* (or `/toc`) writes a nested list of links to the headings between `<!-- toc -->` and `<!-- tocstop -->`. It is brought up to date on save, also in the plain text editor, or with *Update Table of Contents*.
 - **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table.
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
@@ -105,6 +106,9 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
+| `seamlessMarkdown.toc.updateOnSave` | `true` | Update the table of contents when a file that has the markers is saved |
+| `seamlessMarkdown.toc.levels` | `1..6` | Heading levels the table of contents lists, such as `2..4` |
+| `seamlessMarkdown.toc.ordered` | `false` | Numbered list instead of bullets |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations

@@ -5,6 +5,7 @@ import { buildOutline, extractHeadings } from '../shared/textUtil';
 import { listFiles, resolveUris, saveImage } from './images';
 import { MarkdownEditorProvider, type Session } from './markdownEditorProvider';
 import { OutlineProvider } from './outline';
+import { insertTocInTextEditor, updateToc, updateTocOnSave } from './toc';
 
 /** Command name (after "seamlessMarkdown.") → what the webview is asked to do. */
 const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
@@ -144,6 +145,32 @@ export function activate(context: vscode.ExtensionContext): unknown {
     await vscode.env.clipboard.writeText(html);
     vscode.window.setStatusBarMessage(selected ? 'Copied the selection as HTML' : 'Copied the document as HTML', 3000);
   });
+
+  /* ---------- table of contents ---------- */
+  // Both commands also work in the plain text editor.
+  const markdownTextEditor = () => {
+    const editor = vscode.window.activeTextEditor;
+    return editor && editor.document.languageId === 'markdown' ? editor : undefined;
+  };
+  register('insertTableOfContents', async () => {
+    const session = provider.active;
+    if (session) return session.send('toc');
+    const editor = markdownTextEditor();
+    if (editor) await insertTocInTextEditor(editor);
+  });
+  register('updateTableOfContents', async () => {
+    const session = provider.active;
+    const document = session?.document ?? markdownTextEditor()?.document;
+    if (!document) return;
+    await session?.flush();
+    const result = await updateToc(document);
+    if (result === 'missing') {
+      void vscode.window.showInformationMessage('This document has no table of contents. Add one with "Seamless Markdown: Insert Table of Contents".');
+    } else if (result === 'unchanged') {
+      vscode.window.setStatusBarMessage('The table of contents is up to date', 3000);
+    }
+  });
+  context.subscriptions.push(updateTocOnSave(provider));
 
   register('setAsDefault', async () => {
     await provider.setDefault(true);

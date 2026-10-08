@@ -5,13 +5,17 @@ import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Range, RangeSet, RangeValue, StateField, type Text } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { isTocMarker } from '../../shared/toc';
 import { modeField, refreshDecorations, revealBlock } from '../modes';
 import { texOf } from '../markdown';
 import { MathWidget, MermaidWidget } from '../widgets/rendered';
 import { TableWidget } from '../widgets/table';
 
-/** rendered: a diagram or math block drawn in place of its source. */
-export type ProtectedKind = 'table' | 'frontmatter' | 'rendered' | 'fence-open' | 'fence-close';
+/**
+ * rendered: a diagram or math block drawn in place of its source.
+ * hidden: a line that is not shown at all (a table of contents marker in full preview).
+ */
+export type ProtectedKind = 'table' | 'frontmatter' | 'rendered' | 'hidden' | 'fence-open' | 'fence-close';
 
 /** Whole source lines that are drawn as a widget and must stay intact. */
 export class Protected extends RangeValue {
@@ -172,6 +176,13 @@ function build(state: EditorState, reveal: number | null): BlockState {
           if (marks.length >= 2 && close.from >= last.from && last.to > last.from) {
             prot.push(new Protected('fence-close', last.from - first.from, 0).range(last.from, last.to));
           }
+          return false;
+        }
+        case 'CommentBlock': {
+          // The two comments around a table of contents are bookkeeping, not content.
+          if (!full || !wholeLines(doc, node.from, node.to) || !isTocMarker(doc.sliceString(node.from, node.to))) return false;
+          decos.push(Decoration.replace({ block: true }).range(node.from, node.to));
+          prot.push(new Protected('hidden', 0, 0).range(node.from, node.to));
           return false;
         }
         case 'BulletList':

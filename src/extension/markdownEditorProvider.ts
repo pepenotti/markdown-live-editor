@@ -16,6 +16,7 @@ import {
 } from '../shared/protocol';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
+import { readTocOptions } from './toc';
 
 export interface Stats {
   words: number;
@@ -36,6 +37,7 @@ function readConfig(resource: vscode.Uri): EditorConfig {
     showToolbar: c.get<boolean>('showToolbar', true),
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     customCss: c.get<string>('customCss', ''),
+    toc: readTocOptions(resource),
   };
 }
 

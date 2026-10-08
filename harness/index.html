@@ -132,6 +132,7 @@
                         fontFamily: '',
                         showToolbar: params.get('toolbar') !== '0',
                         tableAutoAlign: params.get('align') !== '0',
+                        toc: { minLevel: 1, maxLevel: 6, ordered: params.get('toc') === 'ordered' },
                         customCss: params.get('css') || '',
                       },
                       baseUri: new URL('../sample', location.href).href,

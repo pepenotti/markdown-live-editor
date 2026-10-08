@@ -1,4 +1,5 @@
 // Messages exchanged between the extension host and the webview editor.
+import type { TocOptions } from './toc';
 
 export type Mode = 'raw' | 'half' | 'full';
 export const MODES: readonly Mode[] = ['raw', 'half', 'full'];
@@ -21,6 +22,8 @@ export interface EditorConfig {
   tableAutoAlign: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
+  /** Which headings a table of contents lists, and how. */
+  toc: TocOptions;
 }
 
 /**
@@ -49,6 +52,7 @@ export type CommandId =
   | 'table'
   | 'codeBlock'
   | 'rule'
+  | 'toc'
   | 'bulletList'
   | 'orderedList'
   | 'taskList'
@@ -84,6 +88,8 @@ export type HostMessage =
   | { type: 'config'; config: EditorConfig }
   | { type: 'flush'; reqId: number }
   | { type: 'debugRequest'; reqId: number }
+  /** For the tests: types text at the cursor the way a keyboard would, so it waits in the typing burst. */
+  | { type: 'debugType'; text: string }
   | { type: 'selectionRequest'; reqId: number }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
