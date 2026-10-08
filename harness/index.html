@@ -61,6 +61,7 @@
           edits: [],
           errors: [],
           opened: [],
+          copied: [],
           stats: null,
           mode: null,
           files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
@@ -123,6 +124,8 @@
           getState: () => saved,
           setState: (s) => { saved = s; },
           postMessage(msg) {
+            // Answers to "copyRich" (see src/webview/richCopy.ts), kept for the clipboard checks.
+            if (msg.type === 'copied') h.copied.push(msg);
             switch (msg.type) {
               case 'ready':
                 fetch('../sample/' + docName)

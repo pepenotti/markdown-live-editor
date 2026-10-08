@@ -52,6 +52,7 @@ import { cursorFix, externalChange, modeField, setMode } from './modes';
 import { SyncClient } from './syncClient';
 import { tableFromTSV } from './table/model';
 import { completions, insideCode } from './ui/completions';
+import { copyRich, readClipboard } from './richCopy';
 import { createToolbar, type Toolbar } from './ui/toolbar';
 import { activeTableCell, focusTableAt, wrapInActiveCell } from './widgets/table';
 import { wikiLinkAt } from './wikiLinks';
@@ -647,6 +648,16 @@ host.onMessage((message) => {
         const at = view.state.selection.main.head;
         view.dispatch({ changes: { from: at, insert: message.text }, selection: { anchor: at + message.text.length }, userEvent: 'input.type' });
       }
+      break;
+    case 'copyRich':
+      void copyRich(message.html, message.text, () => view?.focus()).then((result) => {
+        host.post({ type: 'copied', reqId: message.reqId, result });
+        // The copy may have borrowed the focus; typing goes on where it was.
+        view?.focus();
+      });
+      break;
+    case 'debugClipboard':
+      if (testSession) void readClipboard().then((state) => host.post({ type: 'clipboardState', reqId: message.reqId, ...state }));
       break;
     case 'selectionRequest': {
       const sel = view?.state.selection.main;

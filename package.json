@@ -296,6 +296,11 @@
         "category": "Seamless Markdown"
       },
       {
+        "command": "seamlessMarkdown.emailDocument",
+        "title": "Email Document\u2026",
+        "category": "Seamless Markdown"
+      },
+      {
         "command": "seamlessMarkdown.revealLine",
         "title": "Go to Line",
         "category": "Seamless Markdown"
@@ -558,6 +563,10 @@
           "when": "!seamlessMarkdown.pdfUnavailable && (resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor')"
         },
         {
+          "command": "seamlessMarkdown.emailDocument",
+          "when": "resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
           "command": "seamlessMarkdown.revealLine",
           "when": "false"
         },
@@ -586,6 +595,11 @@
           "command": "seamlessMarkdown.exportPdf",
           "when": "!seamlessMarkdown.pdfUnavailable && (resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
           "group": "seamlessMarkdown.export@2"
+        },
+        {
+          "command": "seamlessMarkdown.emailDocument",
+          "when": "(resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
+          "group": "seamlessMarkdown.export@3"
         }
       ],
       "explorer/context": [
@@ -603,6 +617,11 @@
           "command": "seamlessMarkdown.exportPdf",
           "when": "resourceLangId == markdown && !seamlessMarkdown.pdfUnavailable",
           "group": "seamlessMarkdown.export@2"
+        },
+        {
+          "command": "seamlessMarkdown.emailDocument",
+          "when": "resourceLangId == markdown",
+          "group": "seamlessMarkdown.export@3"
         }
       ]
     },
@@ -710,6 +729,11 @@
           "default": "",
           "scope": "machine",
           "markdownDescription": "Path of the Chrome, Edge, Chromium or Brave executable that **Export as PDF** prints with and that draws Mermaid diagrams for both exports. Empty looks in the usual places. Without such a browser PDF export is not offered, and diagrams are exported as their source."
+        },
+        "seamlessMarkdown.email.to": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Address that **Email Document** puts in the To field of the new message. Several can be separated by commas. Empty leaves the field for you to fill in."
         },
         "seamlessMarkdown.spellCheck": {
           "type": "boolean",

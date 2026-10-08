@@ -39,8 +39,11 @@ export interface EditorConfig {
 }
 
 /** What the Export menu of the toolbar asks the host to do. */
-export type ExportAction = 'html' | 'pdf' | 'copyHtml';
-export const EXPORT_ACTIONS: readonly ExportAction[] = ['html', 'pdf', 'copyHtml'];
+export type ExportAction = 'html' | 'pdf' | 'copyHtml' | 'email';
+export const EXPORT_ACTIONS: readonly ExportAction[] = ['html', 'pdf', 'copyHtml', 'email'];
+
+/** How the editor put formatted text on the clipboard: the Clipboard API, or a copy command on a hidden selection. */
+export type RichCopyResult = { ok: true; how: 'api' | 'command' } | { ok: false; error: string };
 
 /**
  * One replaced range. Every position refers to the document as it was before the
@@ -113,6 +116,10 @@ export type HostMessage =
    */
   | { type: 'debugType'; text: string }
   | { type: 'selectionRequest'; reqId: number }
+  /** Asks the editor to put this on the clipboard as formatted text (`text/html`) with a plain-text flavour beside it. Answered with `copied`. */
+  | { type: 'copyRich'; reqId: number; html: string; text: string }
+  /** For the integration tests: asks what is on the clipboard. Ignored unless the session was started with `test`. */
+  | { type: 'debugClipboard'; reqId: number }
   | { type: 'response'; reqId: number; ok: boolean; data?: unknown; error?: string };
 
 export type RequestKind = 'saveImage' | 'listFiles' | 'pickImage' | 'resolveUris' | 'checkLinks' | 'listNotes' | 'noteHeadings';
@@ -163,6 +170,8 @@ export type WebviewMessage =
   | { type: 'request'; reqId: number; kind: RequestKind; payload?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'selectionState'; reqId: number; text: string }
+  | { type: 'copied'; reqId: number; result: RichCopyResult }
+  | { type: 'clipboardState'; reqId: number; types: string[]; html: string; text: string; error?: string }
   | {
       type: 'debugState';
       reqId: number;

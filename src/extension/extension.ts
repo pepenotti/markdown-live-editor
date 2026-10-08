@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
+import { emailDocument } from './email';
 import { detectBrowser, type ExportContext, exportHtml, exportPdf, lastExport, removeTempFiles, wikiHrefs } from './export';
 import { isNotePath } from '../shared/wikiLinks';
 import { BacklinksProvider } from './backlinks';
@@ -228,10 +229,33 @@ export function activate(context: vscode.ExtensionContext): unknown {
   };
   register('copyAsHtml', (resource?: unknown) => copyAsHtml(resource));
 
+  /** Copies the document for a mail and opens a new message. See src/extension/email.ts. */
+  const runEmail = async (resource?: unknown, from?: Session) => {
+    const document = from?.document ?? (await documentFor(resource));
+    if (!document) return undefined;
+    try {
+      await flush(document);
+      // The editor the user is in, if it shows this document; otherwise any editor of ours that does.
+      const sessions = provider.sessionsFor(document.uri);
+      const current = from ?? sessions.find((s) => s === provider.active);
+      return await emailDocument(document, {
+        session: current ?? sessions[0],
+        useSelection: current !== undefined,
+        notes: provider.notes,
+        openInEditor: (uri) => vscode.commands.executeCommand('seamlessMarkdown.openWith', uri),
+      });
+    } catch (err) {
+      void ui.error(`Email Document failed: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  };
+  register('emailDocument', (resource?: unknown) => runEmail(resource));
+
   // The Export menu in the toolbar of an editor.
   provider.exportHandler = (session, action) => {
     if (action === 'html') void runExportHtml(session.document.uri);
     else if (action === 'pdf') void runExportPdf(session.document.uri);
+    else if (action === 'email') void runEmail(undefined, session);
     else void copyAsHtml(undefined, session);
   };
 
@@ -337,6 +361,10 @@ export function activate(context: vscode.ExtensionContext): unknown {
     resetUi: () => uiStub.reset(),
     /** The HTML the last export rendered (what a PDF was printed from). */
     lastExportHtml: () => lastExport.html,
+    /** What the editor can read from the clipboard: its flavours, the HTML and the plain text. */
+    clipboard: async (uri: vscode.Uri) => (await only(uri)).debugClipboard(),
+    /** Makes the next attempts to open a link report that nothing could open it. */
+    failToOpen: () => void (uiStub.openFails = true),
     /** The browser the export would use right now, or why there is none. */
     exportBrowser: () => ({ ...browser }),
     /** Handles a message as if the editor's toolbar had sent it. */
