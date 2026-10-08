@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -127,7 +127,7 @@
       },
       {
         "command": "seamlessMarkdown.pickMode",
-        "title": "Choose Mode\u2026",
+        "title": "Choose Mode…",
         "category": "Seamless Markdown"
       },
       {
@@ -177,7 +177,7 @@
       },
       {
         "command": "seamlessMarkdown.insertImage",
-        "title": "Insert Image\u2026",
+        "title": "Insert Image…",
         "category": "Seamless Markdown"
       },
       {
@@ -257,7 +257,7 @@
       },
       {
         "command": "seamlessMarkdown.goToHeading",
-        "title": "Go to Heading\u2026",
+        "title": "Go to Heading…",
         "category": "Seamless Markdown"
       },
       {
@@ -287,17 +287,17 @@
       },
       {
         "command": "seamlessMarkdown.exportHtml",
-        "title": "Export as HTML\u2026",
+        "title": "Export as HTML…",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.exportPdf",
-        "title": "Export as PDF\u2026",
+        "title": "Export as PDF…",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.emailDocument",
-        "title": "Email Document\u2026",
+        "title": "Email Document…",
         "category": "Seamless Markdown"
       },
       {
