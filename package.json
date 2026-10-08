@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -115,7 +115,7 @@
       },
       {
         "command": "seamlessMarkdown.pickMode",
-        "title": "Choose Mode\u2026",
+        "title": "Choose Mode…",
         "category": "Seamless Markdown"
       },
       {
@@ -165,7 +165,7 @@
       },
       {
         "command": "seamlessMarkdown.insertImage",
-        "title": "Insert Image\u2026",
+        "title": "Insert Image…",
         "category": "Seamless Markdown"
       },
       {
@@ -245,7 +245,7 @@
       },
       {
         "command": "seamlessMarkdown.goToHeading",
-        "title": "Go to Heading\u2026",
+        "title": "Go to Heading…",
         "category": "Seamless Markdown"
       },
       {

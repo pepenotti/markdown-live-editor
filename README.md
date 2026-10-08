@@ -37,7 +37,7 @@ The file on disk is always plain Markdown. The editor never rewrites text you di
 1. Install the packaged extension:
 
    ```bash
-   code --install-extension seamless-markdown-0.2.0.vsix
+   code --install-extension seamless-markdown-0.3.0.vsix
    ```
 
 2. Open a Markdown file, then click the preview icon in the editor title bar, or run **Seamless Markdown: Open with Seamless Markdown** from the Command Palette.
