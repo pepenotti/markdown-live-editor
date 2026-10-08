@@ -134,6 +134,7 @@
                         tableAutoAlign: params.get('align') !== '0',
                         pasteRichText: params.get('rich') !== '0',
                         customCss: params.get('css') || '',
+                        spellCheck: params.get('spell') === '1',
                       },
                       baseUri: new URL('../sample', location.href).href,
                       rootUri: new URL('../sample', location.href).href,

@@ -55,7 +55,8 @@ code --extensionDevelopmentPath="$PWD" sample
 
 - **Formatting**: bold, italic, strikethrough, inline code, headings, bullet, numbered and task lists, quotes, code blocks, links, rules. By typing Markdown, by shortcut, or from the toolbar.
 - **Tables**: rendered as a grid in both preview modes. Click a cell to edit it. `Tab` and `Shift+Tab` move between cells, `Enter` moves down, and both add a row at the end. Arrow keys move in and out of the table. A small bar above the table inserts, deletes and moves rows and columns, sets column alignment, and shows the table's Markdown source.
-- **Images**: shown inline, with relative paths resolved from the document. Paste an image from the clipboard or drop one in and it is saved to an `assets` folder next to the document and linked. Dragging a file from the Explorer links it without copying (hold `Shift` while dropping, as VS Code requires). File paths are completed as you type the target of a link or image.
+- **Images**: shown inline, with relative paths resolved from the document. Paste an image from the clipboard or drop one in and it is saved to an `assets` folder next to the document and linked. Dragging a file from the Explorer links it without copying (hold `Shift` while dropping, as VS Code requires). File paths are completed as you type the target of a link or image. Drag the corner of a picture to resize it; since Markdown has no syntax for a size, the image is then written as an `<img>` tag with a `width`.
+- **Footnotes**: `[^1]` is shown as a raised number and its `[^1]: text` definition as a small numbered note. `Cmd`/`Ctrl`+click jumps between the two.
 - **Math**: `$x^2$` inline and `$$` blocks, drawn with KaTeX. A price such as $5 is left alone.
 - **Mermaid diagrams**: a `mermaid` code block is drawn as a diagram. Click a diagram or formula block, or move into it with the arrow keys, to edit its source with the result shown underneath.
 - **Slash menu**: type `/` at the start of a line to insert a heading, list, quote, code block, table, image, link or divider.
@@ -106,16 +107,17 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
 | `seamlessMarkdown.pasteRichText` | `true` | Paste formatted text (from a web page, Google Docs, Word) as Markdown |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
+| `seamlessMarkdown.spellCheck` | `false` | Turn on the built-in spell checking for the text and table cells |
 | `seamlessMarkdown.promptToSetDefault` | `true` | Ask once whether to become the default Markdown editor |
 
 ## Known limitations
 
 - VS Code does not offer its own Outline view, breadcrumb symbols or find widget to custom editors. Use the Markdown Outline panel, **Go to Heading** and the editor's find panel instead.
-- HTML is shown as source. `<img>` tags get an image preview next to them.
-- Diagrams other than Mermaid (Graphviz, ECharts and so on) are not drawn. Inline math cannot be edited in full preview; switch to half preview for that.
+- HTML is shown as source. `<img>` tags get an image preview next to them; a tag that is only an image is shown as the picture, like a Markdown image.
+- Diagrams other than Mermaid (Graphviz, ECharts and so on) are not drawn.
 - There is no side-by-side split view. The point of the editor is that you do not need one.
 - Tables that are indented or sit inside a list or quote are shown as source.
-- In full preview, a reference-style link (`[text][label]`) shows its target read-only; edit it in half preview. An empty code block cannot be entered with the arrow keys; use the toolbar button, which puts the cursor inside.
+- In full preview, an empty code block cannot be entered with the arrow keys; use the toolbar button, which puts the cursor inside.
 - Typing is sent to VS Code in short bursts so that one burst is one undo step. If you have both `files.autoSave` with a delay and `files.trimTrailingWhitespace` on, a trailing space can be trimmed while you pause in the middle of a sentence, because VS Code cannot see the cursor of a custom editor.
 - Very large documents (several thousand lines) are slower to type in for the first few seconds after opening, while the document is still being parsed.
 
