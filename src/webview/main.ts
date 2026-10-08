@@ -39,7 +39,7 @@ import { inlinePlugin } from './decorations/inline';
 import { editingBehaviour } from './fullMode';
 import { editGuard } from './guard';
 import { HostBridge } from './host';
-import { type Conversion, markdownForPaste } from './htmlToMarkdown';
+import { type Conversion, hasFormattedText, markdownForPaste } from './htmlToMarkdown';
 import { focusPopover, popoverField } from './linkPopover';
 import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
@@ -349,7 +349,8 @@ const domHandlers = EditorView.domEventHandlers({
     const data = event.clipboardData;
     if (!data) return false;
     const images = Array.from(data.files).filter((f) => f.type.startsWith('image/'));
-    if (images.length) {
+    const text = data.getData('text/plain');
+    if (images.length && !hasFormattedText(text, data.getData('text/html'))) {
       event.preventDefault();
       void insertImageFiles(images);
       return true;
@@ -358,7 +359,6 @@ const domHandlers = EditorView.domEventHandlers({
     const plain = Date.now() - plainPasteKey < 1000;
     plainPasteKey = 0;
     if (plain) return false;
-    const text = data.getData('text/plain');
     const sel = v.state.selection.main;
     if (insideCode(v.state, sel.from)) return false;
     const selected = v.state.doc.sliceString(sel.from, sel.to);

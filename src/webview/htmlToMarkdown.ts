@@ -182,6 +182,10 @@ const WORD = /[\p{L}\p{N}]/u;
 /** Escapes the characters of plain text that would otherwise be read as Markdown, and only those. */
 export function escapeText(text: string, inLink = false): string {
   let out = '';
+  // Looked up once, so that a long run of brackets or dollar signs is not rescanned for each of them.
+  const lastBracket = text.lastIndexOf(']');
+  let lastDollar = -1;
+  for (let j = text.length - 1; j > 0 && lastDollar < 0; j--) if (text[j] === '$' && !/\s/.test(text[j - 1])) lastDollar = j;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     const prev = text[i - 1] ?? '';
@@ -203,7 +207,7 @@ export function escapeText(text: string, inLink = false): string {
         escape = !(WORD.test(prev) && WORD.test(next));
         break;
       case '[':
-        escape = inLink || text.indexOf(']', i + 1) >= 0;
+        escape = inLink || lastBracket > i;
         break;
       case ']':
         escape = inLink;
@@ -219,7 +223,7 @@ export function escapeText(text: string, inLink = false): string {
         break;
       case '$':
         // This editor reads `$x$` as math, unless a space follows the opening or precedes the closing dollar.
-        escape = next !== '' && !/\s/.test(next) && /\S\$/.test(text.slice(i + 1));
+        escape = next !== '' && !/\s/.test(next) && lastDollar > i + 1;
         break;
     }
     out += escape ? '\\' + ch : ch;
@@ -230,6 +234,8 @@ export function escapeText(text: string, inLink = false): string {
 /** Escapes a line of a paragraph whose first characters would start another kind of block. */
 function escapeLineStart(line: string): string {
   if (/^(?:#{1,6}(?:\s|$)|>|[-+](?:\s|$)|(?:-\s*){3,}$|=+\s*$)/.test(line)) return '\\' + line;
+  // After a line with a pipe in it, a row of dashes and pipes would turn both into a table.
+  if (line.includes('|') && line.includes('-') && /^[\s|:-]+$/.test(line)) return '\\' + line;
   const ordered = /^(\d{1,9})[.)](?:\s|$)/.exec(line);
   if (ordered) return ordered[1] + '\\' + line.slice(ordered[1].length);
   return line;
@@ -345,10 +351,12 @@ function tidy(runs: Run[]): Run[] {
 
 /** Splits off leading and trailing white space: `<b> a </b>` is ` **a** `, never `** a **`. */
 function edges(text: string): [string, string, string] {
-  const lead = /^[\s\0]*/.exec(text)![0];
-  const rest = text.slice(lead.length);
-  const trail = /[\s\0]*$/.exec(rest)![0];
-  return [lead, rest.slice(0, rest.length - trail.length), trail];
+  const blank = (ch: string) => ch === BR || /\s/.test(ch);
+  let start = 0;
+  let end = text.length;
+  while (start < end && blank(text[start])) start++;
+  while (end > start && blank(text[end - 1])) end--;
+  return [text.slice(0, start), text.slice(start, end), text.slice(end)];
 }
 
 const LEVELS = ['link', 'strike', 'bold', 'italic', 'code'] as const;
@@ -458,7 +466,13 @@ function block(children: HtmlNode[], i: number, parent: HtmlNode, out: Block[], 
     const runs: Run[] = [];
     for (const child of kids(node)) collectInline(child, marks, runs, cx);
     // A heading is bold already.
-    const text = renderInline(runs.map((r) => ({ ...r, bold: false })), cx).split(BR).join(' ').replace(/ {2,}/g, ' ').trim();
+    const text = renderInline(runs.map((r) => ({ ...r, bold: false })), cx)
+      .split(BR)
+      .join(' ')
+      .replace(/ {2,}/g, ' ')
+      .trim()
+      // Hashes at the end, after a space, would be dropped as the closing of the heading.
+      .replace(/(^| )(#+)$/, '$1\\$2');
     if (text) {
       cx.rich = true;
       out.push({ kind: 'other', text: '#'.repeat(Number(heading[1])) + ' ' + text });
@@ -521,7 +535,7 @@ function codeBlock(pre: HtmlNode, parent: HtmlNode): string {
   // GitHub wraps a highlighted block in <div class="highlight highlight-source-js">.
   const language = /(?:^|\s)lang(?:uage)?-([\w+#.-]+)/.exec(classes)?.[1] ?? /(?:^|\s)highlight-source-([\w+#-]+)/.exec(attr(parent, 'class'))?.[1] ?? '';
   let longest = 2;
-  for (const m of text.matchAll(/^\s*(`+)/gm)) longest = Math.max(longest, m[1].length);
+  for (const m of text.matchAll(/^[ \t]*(`+)/gm)) longest = Math.max(longest, m[1].length);
   const fence = '`'.repeat(longest + 1);
   return `${fence}${language}\n${text}\n${fence}`;
 }
@@ -745,6 +759,14 @@ export function isCodeDump(root: HtmlNode): boolean {
     node = only;
   }
   return false;
+}
+
+/**
+ * True when the clipboard holds text in both forms. Word and Excel add a picture of what was
+ * copied; with this, the text is pasted and not that picture.
+ */
+export function hasFormattedText(plain: string, html: string): boolean {
+  return plain.trim() !== '' && html.trim() !== '';
 }
 
 /** Larger clipboards are pasted as plain text rather than holding up the editor. */

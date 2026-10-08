@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { type HtmlNode, convertNode, escapeText, htmlToMarkdown, isCodeDump, markdownForPaste, parseHtml } from '../../src/webview/htmlToMarkdown';
+import { type HtmlNode, convertNode, escapeText, hasFormattedText, htmlToMarkdown, isCodeDump, markdownForPaste, parseHtml } from '../../src/webview/htmlToMarkdown';
 
 const md = htmlToMarkdown;
 
@@ -425,5 +425,51 @@ describe('the tree walk', () => {
     expect(isCodeDump(parseHtml('<p>a</p><pre>x</pre>'))).toBe(false);
     expect(isCodeDump(parseHtml('<div style="font-family: Consolas, monospace">x</div>'))).toBe(true);
     expect(isCodeDump(parseHtml('<div style="font-family: Arial">x</div>'))).toBe(false);
+  });
+});
+
+describe('review fixes', () => {
+  it('keeps hashes at the end of a heading', () => {
+    expect(md('<h2>Foo #</h2>')).toBe('## Foo \\#');
+    expect(md('<h2>Foo ##</h2>')).toBe('## Foo \\##');
+    expect(md('<h2>#</h2>')).toBe('## \\#');
+    expect(md('<h2>C#</h2>')).toBe('## C#');
+  });
+
+  it('does not let a row of dashes after a line with a pipe become a table', () => {
+    expect(md('<p>a | b<br>--- | ---</p>')).toBe('a | b\\\n\\--- | ---');
+    expect(md('<p>a | b<br>|:--|--:|</p>')).toBe('a | b\\\n\\|:--|--:|');
+  });
+
+  it('escapes footnote syntax', () => {
+    expect(md('<p>see [^1] here</p><p>[^1]: not a note</p>')).toBe('see \\[^1] here\n\n\\[^1]: not a note');
+  });
+
+  it('writes an image tag in text as text', () => {
+    expect(md('<p>use &lt;img src="a.png" width="10"&gt; <b>here</b></p>')).toBe('use \\<img src="a.png" width="10"> **here**');
+  });
+
+  it('stays fast on hostile input', () => {
+    const started = Date.now();
+    escapeText('['.repeat(300_000));
+    escapeText('$a'.repeat(200_000));
+    md('<h2><i>a' + '<br>'.repeat(100_000) + 'b</i> c</h2>');
+    md('<p><i>a' + '<br> '.repeat(50_000) + 'b</i> c</p>');
+    md('<pre>' + '\n'.repeat(200_000) + 'x</pre><p>y</p>');
+    md('<table>' + '<tr><td>a</td><td>b</td></tr>'.repeat(5000) + '</table>');
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  it('escapes the same with the faster look-ups', () => {
+    expect(escapeText('[a] [b')).toBe('\\[a] [b');
+    expect(escapeText('$a$ $b')).toBe('\\$a$ $b');
+    expect(escapeText('$a $')).toBe('$a $');
+  });
+
+  it('tells a copy that has text from one that is only a picture', () => {
+    expect(hasFormattedText('A\tB', '<table><tr><td>A</td><td>B</td></tr></table>')).toBe(true);
+    expect(hasFormattedText('', '<img src="https://e.com/a.png">')).toBe(false);
+    expect(hasFormattedText('shot.png', '')).toBe(false);
+    expect(hasFormattedText(' \n', '<p></p>')).toBe(false);
   });
 });
