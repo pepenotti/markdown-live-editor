@@ -630,6 +630,11 @@
           "default": true,
           "description": "Ask once whether Markdown files should open with this editor by default."
         },
+        "seamlessMarkdown.checkLinks": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Underline links and images whose file does not exist, links to a heading that does not exist, and reference links without a definition. They are also listed in the Problems panel. Web links are not checked."
+        },
         "seamlessMarkdown.customCss": {
           "type": "string",
           "default": "",

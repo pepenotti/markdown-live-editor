@@ -1,13 +1,14 @@
 // Entry point of the webview: builds the CodeMirror editor and wires it to the host.
 import { closeBrackets } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { codeFolding, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
+import { codeFolding, ensureSyntaxTree, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
 import { drawSelection, dropCursor, EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { classHighlighter, tagHighlighter, tags } from '@lezer/highlight';
 import {
+  type CheckLinksResult,
   type CommandId,
   type EditorConfig,
   type HostMessage,
@@ -16,6 +17,7 @@ import {
   type Mode,
   MODES,
 } from '../shared/protocol';
+import { findHeading, scanDocument } from '../shared/linkCheck';
 import { countWords, extractHeadings, headingSlugs, slugify } from '../shared/textUtil';
 import { DEFAULT_TOC_OPTIONS } from '../shared/toc';
 import {
@@ -42,6 +44,7 @@ import { editingBehaviour } from './fullMode';
 import { editGuard } from './guard';
 import { HostBridge } from './host';
 import { type Conversion, hasFormattedText, markdownForPaste } from './htmlToMarkdown';
+import { brokenLinkMessages, linkCheck } from './linkCheck';
 import { focusPopover, popoverField } from './linkPopover';
 import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
@@ -73,6 +76,10 @@ let isMac = /Mac/.test(navigator.platform);
 let testSession = false;
 let resolveUrl: (src: string) => string = (s) => s;
 const renderCompartment = new Compartment();
+const links = linkCheck({
+  check: async (targets) => (await host.request<CheckLinksResult>('checkLinks', { targets })).issues,
+  onError: (message) => report(message),
+});
 
 const markdownHighlighter = tagHighlighter([
   { tag: tags.monospace, class: 'tok-monospace' },
@@ -117,6 +124,7 @@ function applyConfig(next: EditorConfig): void {
   custom.textContent = next.customCss ?? '';
   toolbar?.setVisible(next.showToolbar);
   for (const cell of document.querySelectorAll<HTMLElement>('.cm-md-cell')) cell.spellcheck = !!next.spellCheck;
+  links.setEnabled(next.checkLinks !== false);
   view?.dispatch({ effects: renderCompartment.reconfigure(renderConfig.of(currentRenderConfig())) });
 }
 
@@ -149,10 +157,21 @@ function revealLine(line: number): void {
 
 function revealAnchor(anchor: string): void {
   if (!view) return;
-  const wanted = slugify(decodeURIComponent(anchor.replace(/^#/, '')));
-  const headings = extractHeadings(view.state.doc.toString());
-  const index = headingSlugs(headings).indexOf(wanted);
-  if (index >= 0) revealLine(headings[index].line);
+  let name = anchor.replace(/^#/, '');
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // Not percent-encoded after all.
+  }
+  const state = view.state;
+  const text = state.doc.toString();
+  const headings = extractHeadings(text);
+  const index = headingSlugs(headings).indexOf(slugify(name));
+  if (index >= 0) return revealLine(headings[index].line);
+  // What the line scan does not see but the link check accepts: setext headings and headings inside quotes or lists.
+  const tree = ensureSyntaxTree(state, state.doc.length, 500) ?? syntaxTree(state);
+  const heading = findHeading(scanDocument(tree, text).headings, name);
+  if (heading) revealLine(state.doc.lineAt(heading.from).number - 1);
 }
 
 function openLink(href: string): void {
@@ -270,6 +289,8 @@ function runCommand(id: CommandId, arg?: unknown): void {
       return revealLine(Number(arg) || 0);
     case 'revealAnchor':
       return revealAnchor(String(arg ?? ''));
+    case 'recheckLinks':
+      return links.recheck();
     case 'focus':
       v.focus();
       return;
@@ -502,6 +523,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     editGuard,
     editingBehaviour(),
     popoverField,
+    links.extension,
     // VS Code owns undo for the document; only the standalone page keeps its own history.
     host.standalone ? [history(), keymap.of(historyKeymap)] : [],
     search({ top: true }),
@@ -590,6 +612,7 @@ host.onMessage((message) => {
           diagramErrors: document.querySelectorAll('.cm-md-mermaid[data-state="error"]').length,
           math: document.querySelectorAll('.cm-md-math .katex').length,
         },
+        brokenLinks: view ? brokenLinkMessages(view.state) : [],
       });
       break;
     case 'debugType':

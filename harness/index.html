@@ -19,6 +19,7 @@
         --vscode-editorWidget-border: #454545;
         --vscode-editorWidget-background: #252526;
         --vscode-textLink-foreground: #4daafc;
+        --vscode-editorWarning-foreground: #cca700;
         --vscode-textCodeBlock-background: #2b2b2b;
         --vscode-textBlockQuote-border: #616161;
         --vscode-editor-selectionBackground: #264f78;
@@ -63,6 +64,9 @@
           stats: null,
           mode: null,
           files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
+          /** Heading slugs of the Markdown files the mock host knows, for links such as other.md#heading. */
+          anchors: { 'notes/other.md': ['other-note'] },
+          linkChecks: 0,
           /** Pretend something else changed the document. */
           external(text, reason) {
             const a = h.mirror;
@@ -136,6 +140,7 @@
                         toc: { minLevel: 1, maxLevel: 6, ordered: params.get('toc') === 'ordered' },
                         customCss: params.get('css') || '',
                         spellCheck: params.get('spell') === '1',
+                        checkLinks: params.get('links') !== '0',
                       },
                       baseUri: new URL('../sample', location.href).href,
                       rootUri: new URL('../sample', location.href).href,
@@ -163,6 +168,18 @@
                 if (msg.kind === 'listFiles') respond(msg.reqId, { files: h.files.filter((f) => !msg.payload.imagesOnly || /\.(png|svg|jpe?g|gif)$/.test(f)) });
                 else if (msg.kind === 'pickImage') respond(msg.reqId, { items: [{ path: 'assets/photo.png', isImage: true, name: 'photo.png' }] });
                 else if (msg.kind === 'saveImage') respond(msg.reqId, { path: 'assets/' + msg.payload.name, isImage: true, name: msg.payload.name });
+                else if (msg.kind === 'checkLinks') {
+                  // Like the real host: a missing file, or a missing heading in a Markdown file.
+                  h.linkChecks++;
+                  respond(msg.reqId, {
+                    issues: msg.payload.targets.map((t) => {
+                      const path = t.path.replace(/^\.?\//, '');
+                      if (!h.files.includes(path)) return { reason: 'file' };
+                      const slugs = h.anchors[path];
+                      return t.anchor && slugs && !slugs.includes(t.anchor) ? { reason: 'anchor', suggestion: slugs[0] } : null;
+                    }),
+                  });
+                }
                 else if (msg.kind === 'resolveUris') respond(msg.reqId, { items: msg.payload.uris.map((u) => ({ path: u.split('/').pop(), isImage: /\.(png|svg|jpe?g|gif)$/.test(u), name: u.split('/').pop() })) });
                 break;
             }

@@ -12,6 +12,7 @@ body {
   --mdl-dim: var(--vscode-descriptionForeground, #656d76);
   --mdl-border: var(--vscode-editorWidget-border, var(--vscode-panel-border, #d0d7de));
   --mdl-link: var(--vscode-textLink-foreground, #0969da);
+  --mdl-problem: var(--vscode-editorWarning-foreground, #bf8803);
   --mdl-code-bg: var(--vscode-textCodeBlock-background, rgba(129, 139, 152, 0.14));
   --mdl-quote: var(--vscode-textBlockQuote-border, #c5ccd3);
   --mdl-selection: var(--vscode-editor-selectionBackground, #b6d6fd);
@@ -377,6 +378,18 @@ body {
 }
 #app .cm-md-url {
   word-break: break-all;
+}
+/* A link whose file, heading or definition does not exist; the reason is its tooltip. */
+#app .cm-md-broken-link {
+  text-decoration: underline wavy var(--mdl-problem);
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+/* One underline, not the link's straight one on top of the wavy one. */
+#app .cm-md-link:has(.cm-md-broken-link),
+#app .cm-md-broken-link .cm-md-link {
+  text-decoration: none;
 }
 
 #app .cm-md-quote {

@@ -63,6 +63,7 @@ code --extensionDevelopmentPath="$PWD" sample
 - **Table of contents**: *Insert Table of Contents* (or `/toc`) writes a nested list of links to the headings between `<!-- toc -->` and `<!-- tocstop -->`. It is brought up to date on save, also in the plain text editor, or with *Update Table of Contents*.
 - **Smart paste**: pasting a URL over selected text makes a link; pasting cells copied from a spreadsheet makes a table; pasting formatted text from a web page, Google Docs or Word makes Markdown (hold `Shift` while pasting for the plain text).
 - **Links**: `Cmd`/`Ctrl`+click opens web links in the browser, relative `.md` links in this editor, and `#heading` links jump within the document.
+- **Broken links**: a link or image whose file does not exist, a link to a heading that does not exist (in this or another Markdown file) and a reference link without a definition get a wavy underline with the reason, and are listed in the Problems panel. A mistyped heading has a quick fix. Only local files are looked at; web links are never requested.
 - **Task lists** with clickable checkboxes, **GitHub alerts** (`> [!NOTE]`), **code blocks** with syntax colours and a copy button, **front matter** shown as a tidy block.
 - **Outline**: a "Markdown Outline" panel in the Explorer lists the headings; click one to jump to it.
 - **Copy as HTML**: copies the selection, or the whole document, as HTML.
@@ -107,6 +108,7 @@ code --extensionDevelopmentPath="$PWD" sample
 | `seamlessMarkdown.showToolbar` | `true` | Show the toolbar |
 | `seamlessMarkdown.imageFolder` | `assets` | Where pasted and dropped images are saved, relative to the document. `${fileBasenameNoExtension}` is replaced by the document name |
 | `seamlessMarkdown.tableAutoAlign` | `true` | Re-align a table's pipes when one of its cells is edited |
+| `seamlessMarkdown.checkLinks` | `true` | Underline broken links and list them in the Problems panel |
 | `seamlessMarkdown.pasteRichText` | `true` | Paste formatted text (from a web page, Google Docs, Word) as Markdown |
 | `seamlessMarkdown.customCss` | empty | Extra CSS rules for the editor |
 | `seamlessMarkdown.spellCheck` | `false` | Turn on the built-in spell checking for the text and table cells |
