@@ -96,7 +96,7 @@ Exported files contain no scripts and load nothing from the network.
 | Heading level up / down | `Ctrl+Shift+]` / `Ctrl+Shift+[` |
 | Go to heading | `Mod+Shift+O` |
 | Fold / unfold a section | `Mod+Alt+[` / `Mod+Alt+]` |
-| Find and replace | `Mod+F` |
+| Find / find and replace | `Mod+F` / `Mod+H`, then `Enter` and `Shift+Enter` between matches |
 | Indent / outdent a list item | `Tab` / `Shift+Tab` |
 | Move a table row | `Alt+Up` / `Alt+Down` in a cell |
 | Delete a table row / column | `Mod+Shift+Backspace` / `Mod+Alt+Backspace` in a cell |
@@ -138,6 +138,7 @@ All settings start with `seamlessMarkdown.`
 - **The one thing it reformats.** When you edit a table cell, that table's pipes are re-aligned in the file. Turn this off with `tableAutoAlign`.
 - **Resized images become HTML.** Markdown has no syntax for a size, so a resized image is written as an `<img>` tag with a `width`.
 - **Dropping files.** Hold `Shift` while dropping a file from the Explorer, as VS Code requires.
+- **Search across files.** Results in VS Code's Search panel open the file, but VS Code does not yet tell custom editors where the match is, so the editor cannot jump to it or highlight it. Press `Mod+F` in the file to find it. VS Code is working on the missing piece; this will follow once it is available to extensions.
 - **Outline and breadcrumbs.** VS Code does not offer its own Outline view or breadcrumb symbols to custom editors. Use the Markdown Outline panel and **Go to Heading** instead.
 - **HTML in a document** is shown as source. An `<img>` tag is shown as the picture.
 - **Not drawn:** diagram languages other than Mermaid, and tables that are indented or inside a list or quote.

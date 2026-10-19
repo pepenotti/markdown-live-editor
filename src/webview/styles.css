@@ -258,21 +258,27 @@ body {
   font-size: var(--vscode-editor-font-size, 13px);
   line-height: 1.55;
 }
-#app .cm-cursor {
-  border-left: 2px solid var(--mdl-cursor);
-}
-#app .cm-selectionBackground {
-  background: var(--mdl-selection-inactive);
-}
-#app .cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
-  background: var(--mdl-selection);
-}
-#app .cm-content ::selection {
-  background: transparent;
-}
+/* The browser's own selection is used (see selectionMarks.ts). */
+#app .cm-content ::selection,
+#app .cm-content::selection,
 #app .cm-md-cell ::selection,
 #app .cm-md-cell::selection {
   background: var(--mdl-selection);
+}
+#app .cm-content ::selection:window-inactive,
+#app .cm-content::selection:window-inactive {
+  background: var(--mdl-selection-inactive);
+}
+#app .mdl-extra-selection {
+  background: var(--mdl-selection);
+}
+#app .mdl-extra-cursor {
+  display: inline-block;
+  width: 0;
+  height: 1.2em;
+  margin-right: -2px;
+  border-left: 2px solid var(--mdl-cursor);
+  vertical-align: text-bottom;
 }
 
 /* ---------- syntax colours (raw mode and code blocks) ---------- */
@@ -1010,7 +1016,7 @@ body {
   font-style: normal;
   opacity: 0.6;
 }
-#app .cm-panels {
+#app .cm-panels:not(.cm-panels-top) {
   background: var(--mdl-widget);
   color: var(--mdl-fg);
   border-color: var(--mdl-border);
@@ -1021,10 +1027,121 @@ body {
   accent-color: var(--mdl-accent);
 }
 #app .cm-searchMatch {
-  background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 213, 0, 0.4));
+  background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+  outline: 1px solid var(--vscode-editor-findMatchHighlightBorder, transparent);
+  border-radius: 2px;
 }
-#app .cm-searchMatch-selected {
-  background: var(--vscode-editor-findMatchBackground, rgba(255, 150, 50, 0.6));
+#app .cm-searchMatch-selected,
+#app .cm-searchMatch-selected .cm-searchMatch {
+  background: var(--vscode-editor-findMatchBackground, #a8ac94);
+  outline: 1px solid var(--vscode-editor-findMatchBorder, transparent);
+}
+
+/* ---------- find bar, shaped like VS Code's ---------- */
+#app .cm-panels.cm-panels-top {
+  position: absolute;
+  top: 0;
+  right: 18px;
+  left: auto;
+  z-index: 20;
+  border: none;
+  background: transparent;
+}
+#app .mdl-find {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 6px 4px 2px;
+  color: var(--vscode-editorWidget-foreground, var(--mdl-fg));
+  background: var(--mdl-widget);
+  border: 1px solid var(--vscode-widget-border, var(--mdl-border));
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
+  font-family: var(--mdl-font);
+  font-size: 12px;
+}
+#app .mdl-find-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#app .mdl-find-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+#app .mdl-find-field {
+  display: flex;
+  align-items: center;
+  width: 240px;
+  padding-right: 2px;
+  background: var(--mdl-input-bg);
+  border: 1px solid var(--mdl-input-border);
+  border-radius: 3px;
+}
+#app .mdl-find-field:focus-within {
+  border-color: var(--mdl-accent);
+}
+#app .mdl-find-none .mdl-find-row:first-child .mdl-find-field {
+  border-color: var(--vscode-inputValidation-errorBorder, #d1242f);
+}
+#app .mdl-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  font: inherit;
+  color: var(--mdl-input-fg);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+#app .mdl-find button {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#app .mdl-find button:hover:not(:disabled) {
+  background: var(--mdl-hover);
+}
+#app .mdl-find button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#app .mdl-find .mdl-find-toggle {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 2px;
+  font-size: 11px;
+}
+#app .mdl-find .mdl-find-word {
+  text-decoration: underline;
+}
+#app .mdl-find .mdl-find-toggle[aria-pressed='true'] {
+  color: var(--vscode-inputOption-activeForeground, inherit);
+  background: var(--vscode-inputOption-activeBackground, rgba(0, 120, 212, 0.25));
+  border-color: var(--vscode-inputOption-activeBorder, var(--mdl-accent));
+}
+#app .mdl-find .mdl-find-expand {
+  min-width: 16px;
+  align-self: stretch;
+  height: auto;
+}
+#app .mdl-find-count {
+  min-width: 70px;
+  padding: 0 6px;
+  white-space: nowrap;
+  color: var(--mdl-dim);
+}
+#app .mdl-find-error .mdl-find-count {
+  color: var(--vscode-errorForeground, #d1242f);
 }
 #app .cm-md-table-tools button.cm-md-table-danger {
   padding: 0 6px;

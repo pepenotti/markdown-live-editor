@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- Selected text now uses the normal system highlight, so a selection is always visible.
+- A new find bar, shaped like VS Code's: it shows "3 of 12", highlights every match in the theme's find colours, and has match case, whole word, regular expression and replace. `Cmd`/`Ctrl+F` opens it with the selected text, `Enter` and `Shift+Enter` move between matches.
+
 ## 0.5.0
 
 - Export is now reachable from an Export button in the toolbar, the Explorer right-click menu and the Command Palette for any Markdown file, and always reports what it did.

@@ -2,7 +2,7 @@
   "name": "seamless-markdown",
   "displayName": "Seamless Markdown",
   "description": "Edit Markdown in place with three modes: raw, half preview and full preview. Tables, images and formatting without a separate preview pane.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "pepenotti",
   "icon": "images/icon.png",
   "galleryBanner": {
