@@ -2,9 +2,9 @@
 import { closeBrackets } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { codeFolding, ensureSyntaxTree, foldCode, indentUnit, syntaxHighlighting, syntaxTree, unfoldCode } from '@codemirror/language';
-import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import { openSearchPanel, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state';
-import { drawSelection, dropCursor, EditorView, keymap, type ViewUpdate } from '@codemirror/view';
+import { dropCursor, EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { classHighlighter, tagHighlighter, tags } from '@lezer/highlight';
 import {
@@ -49,9 +49,11 @@ import { focusPopover, popoverField } from './linkPopover';
 import { footnoteAt, footnotes, linkInfo } from './links';
 import { markdownSupport } from './markdown';
 import { cursorFix, externalChange, modeField, setMode } from './modes';
+import { selectionMarks } from './selectionMarks';
 import { SyncClient } from './syncClient';
 import { tableFromTSV } from './table/model';
 import { completions, insideCode } from './ui/completions';
+import { findWidget } from './ui/findWidget';
 import { copyRich, readClipboard } from './richCopy';
 import { createToolbar, type Toolbar } from './ui/toolbar';
 import { activeTableCell, focusTableAt, wrapInActiveCell } from './widgets/table';
@@ -329,7 +331,6 @@ const KEYS: { key: string; id: CommandId }[] = [
   { key: 'Ctrl-Shift-]', id: 'headingUp' },
   { key: 'Ctrl-Shift-[', id: 'headingDown' },
   { key: 'Alt-m', id: 'cycleMode' },
-  { key: 'Mod-f', id: 'find' },
 ];
 
 /* ---------- events ---------- */
@@ -536,7 +537,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     EditorView.clickAddsSelectionRange.of((e) => e.altKey),
     indentUnit.of('  '),
     EditorState.tabSize.of(4),
-    drawSelection(),
+    selectionMarks,
     dropCursor(),
     codeFolding({ placeholderText: '⋯' }),
     keymap.of([
@@ -552,7 +553,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
     links.extension,
     // VS Code owns undo for the document; only the standalone page keeps its own history.
     host.standalone ? [history(), keymap.of(historyKeymap)] : [],
-    search({ top: true }),
+    findWidget(),
     completions(host, runCommand, () => wikiLinks),
     keymap.of([
       ...KEYS.map(({ key, id }) => ({
@@ -563,6 +564,10 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
           return true;
         },
       })),
+      // Find is handled here as well as through VS Code: nothing in VS Code reacts to these
+      // keys inside a page, so this works even when VS Code's own shortcut does not arrive.
+      { key: 'Mod-f', preventDefault: true, run: (v) => openSearchPanel(v) },
+      { key: 'Mod-h', preventDefault: true, run: (v) => openSearchPanel(v) },
       ...searchKeymap,
       ...defaultKeymap,
       indentWithTab,
