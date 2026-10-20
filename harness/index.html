@@ -45,6 +45,9 @@
            */
           outlineOpen: params.has('outline') ? params.get('outline') === '1' : (() => { try { return localStorage.getItem('mdl-outline') === '1'; } catch { return false; } })(),
           outlineChanges: [],
+          /** The outline panel's width, remembered the same way; ?outlinewidth=300 overrides it. */
+          outlineWidth: params.has('outlinewidth') ? Number(params.get('outlinewidth')) : (() => { try { return Number(localStorage.getItem('mdl-outline-width')) || undefined; } catch { return undefined; } })(),
+          outlineWidths: [],
           files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
           /** Heading slugs of the Markdown files the mock host knows, for links such as other.md#heading. */
           anchors: { 'notes/other.md': ['other-note'] },
@@ -141,6 +144,7 @@
                       rootUri: new URL('../sample', location.href).href,
                       isMac: /Mac/.test(navigator.platform),
                       outlineOpen: h.outlineOpen,
+                      outlineWidth: h.outlineWidth,
                       test: params.get('test') === '1',
                     });
                   });
@@ -167,6 +171,11 @@
                 h.outlineOpen = msg.open;
                 h.outlineChanges.push(msg.open);
                 try { localStorage.setItem('mdl-outline', msg.open ? '1' : '0'); } catch {}
+                break;
+              case 'outlineResized':
+                h.outlineWidth = msg.width;
+                h.outlineWidths.push(msg.width);
+                try { localStorage.setItem('mdl-outline-width', String(msg.width)); } catch {}
                 break;
               case 'request':
                 if (msg.kind === 'listFiles') respond(msg.reqId, { files: h.files.filter((f) => !msg.payload.imagesOnly || /\.(png|svg|jpe?g|gif)$/.test(f)) });

@@ -27,9 +27,7 @@ import { readTocOptions } from './toc';
 import { LinkChecker } from './linkCheck';
 import { FileWatch } from './fileWatch';
 import { NoteIndex, wikiLinksEnabled } from './notes';
-
-/** Key in `globalState` of whether the outline panel was left open. */
-const OUTLINE_OPEN_KEY = 'outlineOpen';
+import { OutlineMemory } from './outlineMemory';
 
 export interface Stats {
   words: number;
@@ -174,7 +172,8 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
-          outlineOpen: this.provider.outlineOpen,
+          outlineOpen: this.provider.outline.open,
+          outlineWidth: this.provider.outline.width,
           test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
@@ -206,7 +205,10 @@ export class Session implements SyncTarget {
         this.provider.sessionChanged();
         break;
       case 'outlineChanged':
-        void this.provider.rememberOutline(message.open === true);
+        void this.provider.outline.rememberOpen(message.open === true);
+        break;
+      case 'outlineResized':
+        void this.provider.outline.rememberWidth(message.width);
         break;
       case 'stats':
         this.stats = { words: message.words, chars: message.chars, selWords: message.selWords };
@@ -420,6 +422,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
   readonly notes = new NoteIndex(this.watch);
 
   constructor(readonly context: vscode.ExtensionContext) {
+    this.outline = new OutlineMemory(context.globalState);
     this.links = new LinkChecker(
       () => {
         for (const session of this.sessions) if (session.ready) session.send('recheckLinks');
@@ -484,23 +487,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   /* ---------- outline panel ---------- */
 
-  private outlineState: boolean | undefined;
-
   /**
-   * Whether the outline panel inside the editor starts open. Closed until the user opens it;
-   * then remembered for the user, not the workspace, so it follows them across files and windows.
+   * Whether the outline panel inside the editor starts open, and how wide. Remembered for the
+   * user, not the workspace, so it follows them across files and windows.
    */
-  get outlineOpen(): boolean {
-    return (this.outlineState ??= this.context.globalState.get<boolean>(OUTLINE_OPEN_KEY) === true);
-  }
-
-  /** `undefined` forgets the choice, as for a first-time user. */
-  rememberOutline(open: boolean | undefined): Thenable<void> {
-    // Read back from here rather than from globalState, which can briefly hand back an earlier
-    // value when the panel is toggled quickly.
-    this.outlineState = open;
-    return this.context.globalState.update(OUTLINE_OPEN_KEY, open);
-  }
+  readonly outline: OutlineMemory;
 
   /* ---------- links ---------- */
 

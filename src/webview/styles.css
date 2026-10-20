@@ -155,8 +155,7 @@ body {
   outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
   outline-offset: -1px;
 }
-.mdl-toolbar button:focus-visible,
-.mdl-heading:focus-visible {
+.mdl-toolbar button:focus-visible {
   outline: 1px solid var(--mdl-accent);
   outline-offset: -1px;
 }
@@ -167,15 +166,45 @@ body {
   margin: 0 5px;
   background: var(--mdl-border);
 }
-.mdl-heading {
+/* The paragraph style drop-down: drawn like VS Code's own drop-downs (its settings editor, say). */
+.mdl-toolbar .mdl-heading {
   flex: none;
-  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 96px;
   height: 24px;
-  padding: 0 4px;
+  padding: 0 3px 0 7px;
   color: var(--vscode-dropdown-foreground, var(--mdl-fg));
   background: var(--vscode-dropdown-background, var(--mdl-input-bg));
   border: 1px solid var(--vscode-dropdown-border, var(--mdl-border));
-  border-radius: 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.mdl-toolbar .mdl-heading:hover {
+  background: var(--vscode-dropdown-background, var(--mdl-input-bg));
+  outline: none;
+}
+.mdl-toolbar .mdl-heading:focus-visible,
+.mdl-toolbar .mdl-heading[aria-expanded='true'] {
+  outline: 1px solid var(--mdl-accent);
+  outline-offset: -1px;
+}
+.mdl-heading-value {
+  flex: 1;
+  text-align: left;
+}
+.mdl-heading svg {
+  flex: none;
+}
+.mdl-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .mdl-modes {
   flex: none;
@@ -188,7 +217,8 @@ body {
 .mdl-modes button {
   padding: 2px 9px;
   white-space: nowrap;
-  color: var(--mdl-dim);
+  /* The text colour, as in VS Code's tab labels and toggles; the chosen mode is filled in. */
+  color: inherit;
 }
 .mdl-modes button.mdl-active,
 .mdl-modes button.mdl-active:hover {
@@ -239,10 +269,13 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-.mdl-menu button:hover,
-.mdl-menu button:focus-visible {
+.mdl-menu button.mdl-menu-active {
   color: var(--vscode-menu-selectionForeground, inherit);
   background: var(--vscode-menu-selectionBackground, var(--mdl-hover));
+  outline: 1px solid var(--vscode-menu-selectionBorder, transparent);
+  outline-offset: -1px;
+}
+.mdl-menu button:focus {
   outline: none;
 }
 .mdl-menu button[aria-disabled='true'] {
@@ -253,6 +286,46 @@ body {
 .mdl-menu small {
   font-size: 11px;
   white-space: normal;
+}
+/* A drop-down list, as VS Code draws the list of its drop-downs: square, the drop-down's colours,
+   the hovered entry in the list hover colour and the highlighted one in the list selection colour. */
+.mdl-menu.mdl-menu-listbox {
+  min-width: 0;
+  padding: 0;
+  color: var(--vscode-dropdown-foreground, var(--mdl-fg));
+  background: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background, var(--mdl-input-bg)));
+  border: 1px solid var(--vscode-dropdown-border, var(--mdl-border));
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.16));
+  outline: 1px solid var(--vscode-focusBorder, transparent);
+  outline-offset: -1px;
+}
+.mdl-menu.mdl-menu-listbox button {
+  padding: 0 8px;
+  height: 22px;
+  line-height: 22px;
+  justify-content: center;
+  white-space: nowrap;
+  border-radius: 0;
+}
+.mdl-menu.mdl-menu-listbox button:hover {
+  color: var(--vscode-list-hoverForeground, inherit);
+  background: var(--vscode-list-hoverBackground, var(--mdl-hover));
+}
+.mdl-menu.mdl-menu-listbox button.mdl-menu-active {
+  /* High contrast themes have no selection colours: the entry keeps the list's colours and an
+     outline shows it instead. Without any theme (the browser harness) the fallbacks apply. */
+  color: var(--vscode-list-activeSelectionForeground, var(--vscode-dropdown-foreground, var(--mdl-list-active-fg)));
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-dropdown-background, var(--mdl-list-active-bg)));
+  outline: 1px dotted var(--vscode-contrastActiveBorder, transparent);
+  outline-offset: -1px;
+}
+.mdl-menu.mdl-menu-listbox button.mdl-menu-active:focus-visible {
+  outline: 1px solid var(--vscode-list-focusOutline, var(--vscode-contrastActiveBorder, transparent));
+}
+.mdl-menu.mdl-menu-listbox button:hover:not(.mdl-menu-active) {
+  outline: 1px dashed var(--vscode-contrastActiveBorder, transparent);
+  outline-offset: -1px;
 }
 
 /* ---------- editor frame ---------- */
@@ -1266,43 +1339,61 @@ body {
 }
 #app .mdl-outline {
   flex: none;
+  position: relative;
   display: flex;
   align-items: stretch;
+  /* Closed, only the sash is left: a thin strip at the right edge of the editor. */
+  width: 4px;
   min-height: 0;
   font-family: var(--mdl-font);
   font-size: 13px;
   color: var(--vscode-sideBar-foreground, var(--mdl-fg));
 }
-/* The ‹ / › tab: all that is left of the panel while it is collapsed. */
-#app .mdl-outline-handle {
-  flex: none;
-  align-self: flex-start;
-  width: 14px;
-  height: 30px;
-  margin-top: 8px;
-  padding: 0;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--mdl-dim);
-  background: var(--vscode-sideBar-background, var(--mdl-widget));
-  border: 1px solid var(--vscode-contrastBorder, var(--vscode-sideBar-border, var(--mdl-border)));
-  border-right: none;
-  border-radius: 4px 0 0 4px;
-  cursor: pointer;
+/* Open, the width the user dragged it to, but never more than half the editor. */
+#app .mdl-outline.mdl-outline-open {
+  width: clamp(170px, var(--mdl-outline-width, 246px), 50%);
 }
-#app .mdl-outline-handle:hover {
-  color: var(--mdl-fg);
-  background: var(--vscode-list-hoverBackground, var(--mdl-hover));
+/* The sash: VS Code's resize handle. A 4px strip over the panel's left border that turns into the
+   resize cursor and, after a moment (VS Code's default hover delay), shows in the sash colour. */
+#app .mdl-outline-sash {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 35;
+  width: 4px;
+  cursor: ew-resize;
+  touch-action: none;
 }
-#app .mdl-outline-handle:focus-visible {
-  outline: 1px solid var(--mdl-accent);
-  outline-offset: -1px;
+#app .mdl-outline-open .mdl-outline-sash {
+  left: -2px;
+}
+#app .mdl-outline-sash::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background-color 0.1s ease-out;
+}
+#app .mdl-outline-sash:hover::before {
+  background: var(--vscode-sash-hoverBorder, var(--mdl-accent));
+  transition-delay: 0.3s;
+}
+#app .mdl-outline-sash.mdl-sash-active::before {
+  background: var(--vscode-sash-hoverBorder, var(--mdl-accent));
+  transition-delay: 0s;
+}
+/* While dragging, the cursor stays the resize cursor and nothing gets selected. */
+body.mdl-sash-dragging,
+body.mdl-sash-dragging * {
+  cursor: ew-resize !important;
+  user-select: none;
 }
 #app .mdl-outline-body {
   display: flex;
   flex-direction: column;
-  width: 246px;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   background: var(--vscode-sideBar-background, var(--mdl-widget));
   border-left: 1px solid var(--vscode-contrastBorder, var(--vscode-sideBar-border, var(--mdl-border)));
@@ -1406,13 +1497,12 @@ body {
 }
 /* Too narrow for text and outline side by side: the open panel floats over the text. */
 @media (max-width: 719px) {
-  #app .mdl-outline-open .mdl-outline-body {
+  #app .mdl-outline.mdl-outline-open {
     position: absolute;
     top: 0;
-    right: 14px;
+    right: 0;
     bottom: 0;
     z-index: 30;
-    width: min(260px, calc(100% - 56px));
     box-shadow: -4px 0 14px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
   }
 }

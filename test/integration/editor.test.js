@@ -466,25 +466,33 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(document.isDirty, false);
   });
 
-  test('the outline panel starts collapsed, and the host remembers it open or closed for the next editor', async () => {
+  test('the outline panel starts collapsed, and the host remembers it open or closed, and its width, for the next editor', async () => {
     // A first-time user: nothing remembered.
     await api.outlineRemembered(undefined, null);
+    await api.outlineWidthRemembered(null);
     try {
       const first = await open('plain.md');
       let state = await api.state(first.uri);
       assert.strictEqual(state.outlineAtInit, false, 'init asks for a collapsed panel');
       assert.strictEqual(state.outlineOpen, false, 'the panel starts collapsed');
+      assert.strictEqual(state.outlineWidthAtInit, undefined, 'init asks for the default width');
+      assert.strictEqual(state.outlineWidth, 246, 'the panel has the default width');
 
       await vscode.commands.executeCommand('seamlessMarkdown.toggleOutline');
       await until(async () => (await api.outlineRemembered()) === true, 'the host to remember the panel open');
       state = await api.state(first.uri);
       assert.strictEqual(state.outlineOpen, true, 'the command opened the panel');
+      // Resized as a drag of its edge does.
+      await api.post(first.uri, { type: 'debugOutlineWidth', width: 318 });
+      await until(async () => (await api.outlineWidthRemembered()) === 318, 'the host to remember the width');
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 
-      // Another file, opened afterwards, is told to start with the panel open.
+      // Another file, opened afterwards, is told to start with the panel open and as wide.
       const second = await open('split.md');
       state = await api.state(second.uri);
       assert.strictEqual(state.outlineAtInit, true, 'init carries the remembered state');
+      assert.strictEqual(state.outlineWidthAtInit, 318, 'init carries the remembered width');
+      assert.strictEqual(state.outlineWidth, 318, 'the panel takes the remembered width');
       assert.deepStrictEqual(state.problems, []);
 
       await vscode.commands.executeCommand('seamlessMarkdown.toggleOutline');
@@ -494,8 +502,11 @@ suite('Seamless Markdown', () => {
       state = await api.state(third.uri);
       assert.strictEqual(state.outlineAtInit, false);
       assert.strictEqual(state.outlineOpen, false);
+      // Closing the panel keeps its width for when it opens again.
+      assert.strictEqual(state.outlineWidthAtInit, 318);
     } finally {
       await api.outlineRemembered(undefined, null);
+      await api.outlineWidthRemembered(null);
     }
   });
 

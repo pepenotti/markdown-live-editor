@@ -1,8 +1,11 @@
 // The outline panel docked on the right of the editor: the document's headings, the one the
-// reader is in highlighted, a filter box, and a click (or Enter) to jump. Collapsed it is a
-// slim handle. The list is built from the syntax tree; see ../outline.ts for the model.
+// reader is in highlighted, a filter box, and a click (or Enter) to jump. Its left edge is a sash,
+// as in VS Code: drag it to resize the panel, drag it narrow to close it, double-click it for the
+// default width. Closed, the sash stays at the right edge of the editor and can be dragged out.
+// The list is built from the syntax tree; see ../outline.ts for the model.
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorView, type ViewUpdate } from '@codemirror/view';
+import { dragOutlineWidth, normalizeOutlineWidth, OUTLINE_DEFAULT_WIDTH } from '../../shared/outlineWidth';
 import { currentHeading, filterOutline, type OutlineItem, outlineFromTree, outlineMayChange, sameOutline } from '../outline';
 
 /** Below this window width the panel floats over the text instead of taking room from it. */
@@ -22,11 +25,17 @@ export interface OutlinePanel {
    * `remember` tells the host, so that the next editor starts the same way.
    */
   setOpen(open: boolean, options?: { focus?: boolean; remember?: boolean }): void;
+  /** The panel's width while open, in pixels (it is narrower where the editor has no room for it). */
+  width(): number;
+  /** Sets the width; `remember` tells the host. A width that makes no sense means the default. */
+  setWidth(width: number | undefined, options?: { remember?: boolean }): void;
 }
 
 export interface OutlineOptions {
   /** The panel was opened or closed by the user; `open` is to be remembered. */
   onChange(open: boolean): void;
+  /** The user resized the panel; `width` is to be remembered. */
+  onResize?(width: number): void;
   /** The panel's toggle shortcut was pressed inside the panel. */
   onToggleKey?(): void;
 }
@@ -40,12 +49,10 @@ export function createOutlinePanel(options: OutlineOptions): OutlinePanel {
   dom.className = 'mdl-outline';
   dom.setAttribute('aria-label', 'Outline');
 
-  const handle = document.createElement('button');
-  handle.type = 'button';
-  handle.className = 'mdl-outline-handle';
-  handle.setAttribute('aria-controls', 'mdl-outline-body');
-  handle.addEventListener('mousedown', (e) => e.preventDefault());
-  handle.addEventListener('click', () => setOpen(!open, { remember: true }));
+  // Only the mouse uses the sash; the keyboard has the toolbar button and Alt+O.
+  const sash = document.createElement('div');
+  sash.className = 'mdl-outline-sash';
+  sash.setAttribute('aria-hidden', 'true');
 
   const body = document.createElement('div');
   body.className = 'mdl-outline-body';
@@ -74,10 +81,11 @@ export function createOutlinePanel(options: OutlineOptions): OutlinePanel {
   empty.className = 'mdl-outline-empty';
 
   body.append(head, list, empty);
-  dom.append(handle, body);
+  dom.append(sash, body);
 
   let view: EditorView | undefined;
   let open = false;
+  let width = OUTLINE_DEFAULT_WIDTH;
   let items: OutlineItem[] = [];
   let rows: HTMLElement[] = [];
   /** Whether `items` may be out of date (it is not kept up to date while the panel is closed). */
@@ -313,11 +321,69 @@ export function createOutlinePanel(options: OutlineOptions): OutlinePanel {
   function showState(): void {
     dom.classList.toggle('mdl-outline-open', open);
     body.hidden = !open;
-    handle.textContent = open ? '›' : '‹';
-    handle.title = open ? 'Hide outline' : 'Show outline';
-    handle.setAttribute('aria-label', handle.title);
-    handle.setAttribute('aria-expanded', String(open));
   }
+
+  function showWidth(): void {
+    dom.style.setProperty('--mdl-outline-width', `${width}px`);
+  }
+
+  function setWidth(next: number | undefined, opts: { remember?: boolean } = {}): void {
+    width = normalizeOutlineWidth(next) ?? OUTLINE_DEFAULT_WIDTH;
+    showWidth();
+    if (opts.remember) options.onResize?.(width);
+  }
+
+  /* ---------- the sash ---------- */
+
+  sash.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !dom.parentElement) return;
+    // No text selection, and the focus stays where it is.
+    e.preventDefault();
+    const area = dom.parentElement.getBoundingClientRect().width;
+    const startX = e.clientX;
+    const startOpen = open;
+    const startWidth = width;
+    // What is on screen, which can be less than `width` where the editor is narrow.
+    const from = open ? dom.getBoundingClientRect().width : 0;
+    let moved = false;
+    sash.setPointerCapture?.(e.pointerId);
+    sash.classList.add('mdl-sash-active');
+    document.body.classList.add('mdl-sash-dragging');
+
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientX - startX) < 2) return;
+      moved = true;
+      const next = dragOutlineWidth(from + startX - ev.clientX, area);
+      if (next.open) {
+        width = next.width;
+        showWidth();
+      }
+      if (next.open !== open) setOpen(next.open);
+    };
+    const end = () => {
+      sash.removeEventListener('pointermove', move);
+      sash.removeEventListener('pointerup', end);
+      sash.removeEventListener('pointercancel', end);
+      sash.classList.remove('mdl-sash-active');
+      document.body.classList.remove('mdl-sash-dragging');
+      if (!moved) return;
+      // Snapped shut, the panel keeps the width it had, as VS Code's side bar does.
+      if (!open) {
+        width = startWidth;
+        showWidth();
+      }
+      if (open !== startOpen) options.onChange(open);
+      if (width !== startWidth) options.onResize?.(width);
+    };
+    sash.addEventListener('pointermove', move);
+    sash.addEventListener('pointerup', end);
+    sash.addEventListener('pointercancel', end);
+  });
+
+  sash.addEventListener('dblclick', () => {
+    if (width !== OUTLINE_DEFAULT_WIDTH) setWidth(OUTLINE_DEFAULT_WIDTH, { remember: true });
+    if (!open) setOpen(true, { remember: true });
+  });
 
   function setOpen(next: boolean, opts: { focus?: boolean; remember?: boolean } = {}): void {
     const hadFocus = dom.contains(document.activeElement);
@@ -355,6 +421,7 @@ export function createOutlinePanel(options: OutlineOptions): OutlinePanel {
   );
 
   showState();
+  showWidth();
 
   return {
     dom,
@@ -385,5 +452,7 @@ export function createOutlinePanel(options: OutlineOptions): OutlinePanel {
     },
     isOpen: () => open,
     setOpen,
+    width: () => width,
+    setWidth,
   };
 }

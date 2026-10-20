@@ -351,8 +351,13 @@ export function activate(context: vscode.ExtensionContext): unknown {
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
     /** Whether the outline panel is remembered as open; `set` changes that first (undefined forgets it). */
     outlineRemembered: async (_uri: vscode.Uri | undefined, set?: boolean | null) => {
-      if (set !== undefined) await provider.rememberOutline(set === null ? undefined : set);
-      return provider.outlineOpen;
+      if (set !== undefined) await provider.outline.rememberOpen(set === null ? undefined : set);
+      return provider.outline.open;
+    },
+    /** The outline panel's remembered width; `set` changes that first (null forgets it). */
+    outlineWidthRemembered: async (set?: number | null) => {
+      if (set !== undefined) await provider.outline.rememberWidth(set ?? undefined);
+      return provider.outline.width;
     },
     rendererLoaded: () => rendererLoaded(),
     /** Answers the next save dialog with `target` (undefined cancels it) and forgets what was shown before. */

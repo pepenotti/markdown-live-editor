@@ -1,5 +1,6 @@
 // The toolbar above the editor: formatting buttons on the left, then Export, the mode switch and the outline toggle on the right.
 import { MODE_LABELS, MODES, type CommandId, type ExportAction, type Mode } from '../../shared/protocol';
+import { createPopupMenu } from './popupMenu';
 
 const svg = (body: string) =>
   `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -64,6 +65,8 @@ export interface Toolbar {
   setOutline(open: boolean): void;
 }
 
+const HEADING_LABELS = ['Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'];
+
 const EXPORT_ITEMS: { action: ExportAction; label: string }[] = [
   { action: 'html', label: 'Export as HTML…' },
   { action: 'pdf', label: 'Export as PDF…' },
@@ -79,23 +82,50 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
   const mod = isMac ? '⌘' : 'Ctrl';
   const keys = (k: string) => k.replace('Mod', mod).replace('Alt', isMac ? '⌥' : 'Alt').replace('Shift', isMac ? '⇧' : 'Shift');
 
-  const heading = document.createElement('select');
+  /* ---------- paragraph style ---------- */
+  // A drop-down drawn in the page rather than a <select>, whose open list the operating system
+  // draws in its own colours.
+  const heading = document.createElement('button');
+  heading.type = 'button';
   heading.className = 'mdl-heading';
   heading.title = 'Paragraph style';
-  heading.setAttribute('aria-label', 'Paragraph style');
-  ['Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'].forEach((label, level) => {
-    const option = document.createElement('option');
-    option.value = String(level);
-    option.textContent = label;
-    heading.append(option);
-  });
+  const headingName = document.createElement('span');
+  headingName.className = 'mdl-visually-hidden';
+  headingName.id = 'mdl-heading-name';
+  headingName.textContent = 'Paragraph style';
+  const headingValue = document.createElement('span');
+  headingValue.className = 'mdl-heading-value';
+  headingValue.id = 'mdl-heading-value';
+  heading.setAttribute('aria-labelledby', 'mdl-heading-name mdl-heading-value');
+  heading.append(headingName, headingValue);
+  heading.insertAdjacentHTML('beforeend', ICONS.caret);
   let headingLevel = 0;
-  heading.addEventListener('change', () => {
-    const level = Number(heading.value);
-    // Choosing the current level again would toggle it off, so only act on a real change.
-    if (level !== headingLevel) run('heading', level === 0 ? headingLevel : level);
-    run('focus');
+  const headingMenu = createPopupMenu({
+    button: heading,
+    kind: 'listbox',
+    label: 'Paragraph style',
+    className: 'mdl-heading-list',
+    align: 'start',
+    initial: () => headingLevel,
+    onChoose(_item, level) {
+      // Choosing the current level again would toggle it off, so only act on a real change.
+      if (level !== headingLevel) run('heading', level === 0 ? headingLevel : level);
+      run('focus');
+    },
   });
+  const headingOptions = HEADING_LABELS.map((label, level) => {
+    const option = document.createElement('button');
+    option.textContent = label;
+    option.dataset.level = String(level);
+    headingMenu.add(option);
+    return option;
+  });
+  function showHeading(level: number): void {
+    headingLevel = level;
+    headingValue.textContent = HEADING_LABELS[level] ?? HEADING_LABELS[0];
+    headingOptions.forEach((option, i) => option.setAttribute('aria-selected', String(i === level)));
+  }
+  showHeading(0);
   dom.append(heading);
 
   const left = document.createElement('div');
@@ -124,79 +154,25 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
   exportButton.className = 'mdl-export';
   exportButton.innerHTML = `${ICONS.export}<span>Export</span>${ICONS.caret}`;
   exportButton.title = 'Export this document';
-  exportButton.setAttribute('aria-haspopup', 'menu');
-  exportButton.setAttribute('aria-expanded', 'false');
-  // The toolbar scrolls sideways when it is narrow, which would clip a menu inside it,
-  // so the menu lives in the page and is placed under the button.
-  const menu = document.createElement('div');
-  menu.className = 'mdl-menu';
-  menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', 'Export');
-  menu.hidden = true;
+  const exportMenu = createPopupMenu({
+    button: exportButton,
+    kind: 'menu',
+    label: 'Export',
+    align: 'end',
+    onChoose: (item) => onExport(item.dataset.action as ExportAction),
+  });
   const items = new Map<ExportAction, HTMLButtonElement>();
   const pdfHint = document.createElement('small');
   for (const { action, label } of EXPORT_ITEMS) {
     const item = document.createElement('button');
-    item.type = 'button';
-    item.setAttribute('role', 'menuitem');
     item.dataset.action = action;
     const text = document.createElement('span');
     text.textContent = label;
     item.append(text);
     if (action === 'pdf') item.append(pdfHint);
-    item.addEventListener('mousedown', (e) => e.preventDefault());
-    item.addEventListener('click', () => {
-      if (item.getAttribute('aria-disabled') === 'true') return;
-      closeMenu();
-      onExport(action);
-    });
     items.set(action, item);
-    menu.append(item);
+    exportMenu.add(item);
   }
-  const enabledItems = () => [...items.values()].filter((item) => item.getAttribute('aria-disabled') !== 'true');
-  const outside = (e: Event) => {
-    if (!menu.contains(e.target as Node) && !exportButton.contains(e.target as Node)) closeMenu();
-  };
-  function closeMenu(): void {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    menu.remove();
-    exportButton.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('mousedown', outside, true);
-    window.removeEventListener('blur', closeMenu);
-    window.removeEventListener('resize', closeMenu);
-  }
-  function openMenu(focusFirst: boolean): void {
-    const box = exportButton.getBoundingClientRect();
-    document.body.append(menu);
-    menu.hidden = false;
-    menu.style.top = `${Math.round(box.bottom + 4)}px`;
-    menu.style.right = `${Math.max(8, Math.round(document.documentElement.clientWidth - box.right))}px`;
-    exportButton.setAttribute('aria-expanded', 'true');
-    document.addEventListener('mousedown', outside, true);
-    window.addEventListener('blur', closeMenu);
-    window.addEventListener('resize', closeMenu);
-    if (focusFirst) enabledItems()[0]?.focus();
-  }
-  exportButton.addEventListener('mousedown', (e) => e.preventDefault());
-  exportButton.addEventListener('click', () => (menu.hidden ? openMenu(false) : closeMenu()));
-  exportButton.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowDown') return;
-    e.preventDefault();
-    if (menu.hidden) openMenu(true);
-    else enabledItems()[0]?.focus();
-  });
-  menu.addEventListener('keydown', (e) => {
-    const list = enabledItems();
-    const at = list.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === 'Escape') {
-      closeMenu();
-      exportButton.focus();
-    } else if (e.key === 'ArrowDown') list[(at + 1) % list.length]?.focus();
-    else if (e.key === 'ArrowUp') list[(at - 1 + list.length) % list.length]?.focus();
-    else return;
-    e.preventDefault();
-  });
   dom.append(exportButton);
 
   const modes = document.createElement('div');
@@ -236,13 +212,13 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
         b.setAttribute('aria-pressed', String(m === mode));
       }
     },
-    setHeading(level) {
-      headingLevel = level;
-      heading.value = String(level);
-    },
+    setHeading: showHeading,
     setVisible(visible) {
       dom.hidden = !visible;
-      if (!visible) closeMenu();
+      if (!visible) {
+        exportMenu.close();
+        headingMenu.close();
+      }
     },
     setExport(canPdf, hint) {
       const pdf = items.get('pdf')!;

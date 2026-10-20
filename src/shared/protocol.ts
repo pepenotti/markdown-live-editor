@@ -104,7 +104,9 @@ export type HostMessage =
       isMac: boolean;
       /** Whether the outline panel starts open. Remembered for the user, across files and windows. */
       outlineOpen: boolean;
-      /** Set by the integration tests. Unlocks `debugType`. */
+      /** The width the user gave the outline panel, in pixels; undefined for the default. Remembered like `outlineOpen`. */
+      outlineWidth?: number;
+      /** Set by the integration tests. Unlocks `debugType` and `debugOutlineWidth`. */
       test?: boolean;
     }
   | { type: 'sync'; text: string; epoch: number }
@@ -118,6 +120,8 @@ export type HostMessage =
    * waits in the typing burst. Ignored unless the session was started with `test`.
    */
   | { type: 'debugType'; text: string }
+  /** For the integration tests: sets the outline panel's width as a drag of its edge would. Ignored unless started with `test`. */
+  | { type: 'debugOutlineWidth'; width: number }
   | { type: 'selectionRequest'; reqId: number }
   /** Asks the editor to put this on the clipboard as formatted text (`text/html`) with a plain-text flavour beside it. Answered with `copied`. */
   | { type: 'copyRich'; reqId: number; html: string; text: string }
@@ -168,6 +172,8 @@ export type WebviewMessage =
   | { type: 'modeChanged'; mode: Mode }
   /** The user opened or closed the outline panel. */
   | { type: 'outlineChanged'; open: boolean }
+  /** The user resized the outline panel by dragging its edge, or reset its width. */
+  | { type: 'outlineResized'; width: number }
   | { type: 'stats'; words: number; chars: number; selWords: number }
   | { type: 'openLink'; href: string }
   | { type: 'openWikiLink'; target: string; heading: string }
@@ -188,6 +194,9 @@ export type WebviewMessage =
       /** Whether the outline panel is open, and whether `init` asked for it to start open. */
       outlineOpen: boolean;
       outlineAtInit: boolean;
+      /** The outline panel's width, and the width `init` asked for (undefined for the default). */
+      outlineWidth: number;
+      outlineWidthAtInit: number | undefined;
       problems: string[];
       /** How many diagrams, formulas and wiki links are drawn on screen, and how many diagrams failed. */
       rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number };
