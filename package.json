@@ -45,7 +45,8 @@
     "screenshots": "node scripts/screenshots.mjs",
     "demo-gif": "node scripts/demo-gif.mjs",
     "release:tag": "node scripts/tag-release.mjs",
-    "notices": "node scripts/notices.mjs"
+    "notices": "node scripts/notices.mjs",
+    "preview": "npm run build && code --new-window --extensionDevelopmentPath=\"$PWD\" sample sample/preview.md"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",
