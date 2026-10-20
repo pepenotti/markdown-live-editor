@@ -79,6 +79,7 @@ let toolbar: Toolbar | undefined;
 let outline: OutlinePanel | undefined;
 /** What `init` said about the outline panel (for the tests: the panel itself stays shut in a narrow window). */
 let outlineAtInit = false;
+let outlineWidthAtInit: number | undefined;
 let config: EditorConfig;
 let isMac = /Mac/.test(navigator.platform);
 let testSession = false;
@@ -533,6 +534,7 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
       toolbar?.setOutline(open);
       host.post({ type: 'outlineChanged', open });
     },
+    onResize: (width) => host.post({ type: 'outlineResized', width }),
     onToggleKey: () => host.standalone && runCommand('toggleOutline'),
   });
   // The text and the outline side by side, below the toolbar.
@@ -613,6 +615,8 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   toolbar.setHeading(headingLevelAt(state));
   outline.attach(view);
   outlineAtInit = message.outlineOpen === true;
+  outlineWidthAtInit = message.outlineWidth;
+  outline.setWidth(message.outlineWidth);
   // Collapsed unless the user left it open. Where it would cover the text it starts collapsed.
   if (message.outlineOpen && window.innerWidth >= OUTLINE_OVERLAY_WIDTH) outline.setOpen(true);
   toolbar.setOutline(outline.isOpen());
@@ -665,6 +669,8 @@ host.onMessage((message) => {
         cursorLine: view ? view.state.doc.lineAt(view.state.selection.main.head).number - 1 : 0,
         outlineOpen: !!outline?.isOpen(),
         outlineAtInit,
+        outlineWidth: outline?.width() ?? 0,
+        outlineWidthAtInit,
         problems: [...problems],
         rendered: {
           diagrams: document.querySelectorAll('.cm-md-mermaid[data-state="done"] svg').length,
@@ -680,6 +686,9 @@ host.onMessage((message) => {
         const at = view.state.selection.main.head;
         view.dispatch({ changes: { from: at, insert: message.text }, selection: { anchor: at + message.text.length }, userEvent: 'input.type' });
       }
+      break;
+    case 'debugOutlineWidth':
+      if (testSession) outline?.setWidth(message.width, { remember: true });
       break;
     case 'copyRich':
       void copyRich(message.html, message.text, () => view?.focus()).then((result) => {
