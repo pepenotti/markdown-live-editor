@@ -97,10 +97,21 @@ function darkTheme(): boolean {
   return c.contains('vscode-dark') || (c.contains('vscode-high-contrast') && !c.contains('vscode-high-contrast-light'));
 }
 
+/**
+ * Mermaid's light or dark theme, whichever matches the editor's, in the editor's font.
+ * Mermaid's tuned themes are kept rather than its adjustable "base" theme: that one derives
+ * every colour from a few given ones, and VS Code's neutral widget colours turn pie charts and
+ * other coloured diagrams grey.
+ */
+function diagramTheme(): Record<string, unknown> {
+  const font = getComputedStyle(document.body).getPropertyValue('--mdl-font').trim();
+  return { theme: darkTheme() ? 'dark' : 'default', ...(font ? { fontFamily: font } : {}) };
+}
+
 /** Renders one diagram. Calls are queued because the library draws one diagram at a time. */
 function renderDiagram(source: string): Promise<Rendered> {
-  const dark = darkTheme();
-  const key = `${dark ? 'd' : 'l'}:${source}`;
+  const theme = diagramTheme();
+  const key = `${JSON.stringify(theme)}:${source}`;
   const hit = diagramCache.get(key);
   if (hit) return Promise.resolve(hit);
   const job = queue.then(async (): Promise<Rendered> => {
@@ -108,7 +119,7 @@ function renderDiagram(source: string): Promise<Rendered> {
     let result: Rendered;
     try {
       const mermaid = await loadMermaid();
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', ...theme });
       result = { svg: (await mermaid.render(id, source)).svg };
     } catch (err) {
       result = { error: (err instanceof Error ? err.message : String(err)).split('\n').slice(0, 4).join('\n') };

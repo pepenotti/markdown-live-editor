@@ -1,8 +1,10 @@
 @import 'katex/dist/katex.min.css';
 
-/* Seamless Markdown. Colours come from the VS Code theme, with fallbacks for the browser harness. */
+/* Seamless Markdown. Colours come from the VS Code theme, with fallbacks for the browser harness.
+   Text uses the VS Code interface font, which VS Code gives webviews: on each platform it is the
+   same system font as the default of VS Code's own Markdown preview (markdown.preview.fontFamily). */
 body {
-  --mdl-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif);
+  --mdl-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif);
   --mdl-mono: var(--vscode-editor-font-family, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
   --mdl-font-size: 15px;
   --mdl-line-width: 860px;
@@ -28,34 +30,58 @@ body {
   --mdl-button-fg: var(--vscode-button-foreground, #ffffff);
   --mdl-list-active-bg: var(--vscode-list-activeSelectionBackground, #0969da);
   --mdl-list-active-fg: var(--vscode-list-activeSelectionForeground, #ffffff);
+  /* High contrast themes outline boxes with these; other themes leave them unset. */
+  --mdl-outline: var(--vscode-contrastBorder, transparent);
+  --mdl-outline-active: var(--vscode-contrastActiveBorder, transparent);
+  --mdl-shadow: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.16));
 
-  --mdl-tok-keyword: #cf222e;
-  --mdl-tok-string: #0a3069;
-  --mdl-tok-number: #0550ae;
-  --mdl-tok-comment: #6e7781;
-  --mdl-tok-name: #8250df;
-  --mdl-tok-type: #953800;
-  --mdl-tok-heading: #0550ae;
-  --mdl-note: #0969da;
-  --mdl-tip: #1a7f37;
-  --mdl-important: #8250df;
-  --mdl-warning: #9a6700;
-  --mdl-caution: #cf222e;
+  /* Code colours. Webviews do not get the theme's token colours, so these come from the colours
+     VS Code's debug views and symbol icons use for keywords, strings, numbers, constants and names:
+     a theme may set them, and VS Code fills in its Dark+/Light+ colours when it does not. Those
+     defaults are also the fallbacks here. Comments use the theme's secondary text colour. On light
+     themes the colours are darkened a little: VS Code's light defaults were made for white, and fall
+     under 4.5:1 on a code block's grey or on cream backgrounds such as Solarized Light. */
+  --mdl-tok-keyword: color-mix(in srgb, var(--vscode-debugTokenExpression-name, #9b46b0), black 15%);
+  --mdl-tok-string: color-mix(in srgb, var(--vscode-debugTokenExpression-string, #a31515), black 15%);
+  --mdl-tok-number: color-mix(in srgb, var(--vscode-debugTokenExpression-number, #098658), black 15%);
+  --mdl-tok-constant: color-mix(in srgb, var(--vscode-debugTokenExpression-boolean, #0000ff), black 15%);
+  --mdl-tok-comment: color-mix(in srgb, var(--mdl-dim), black 15%);
+  --mdl-tok-name: color-mix(in srgb, var(--vscode-symbolIcon-functionForeground, #652d90), black 15%);
+  --mdl-tok-type: color-mix(in srgb, var(--vscode-symbolIcon-classForeground, #d67e00), black 30%);
+  --mdl-tok-heading: var(--vscode-debugTokenExpression-boolean, #0000ff);
+
+  /* Alert colours: the theme's info, warning and error colours, and its chart green and purple. */
+  --mdl-note: var(--vscode-editorInfo-foreground, #0063d3);
+  --mdl-tip: var(--vscode-charts-green, #388a34);
+  --mdl-important: var(--vscode-charts-purple, #652d90);
+  --mdl-warning: var(--vscode-editorWarning-foreground, #bf8803);
+  --mdl-caution: var(--vscode-editorError-foreground, #e51400);
+  /* Coloured text (an alert's title) is moved this far towards black or white, so it reads as text:
+     VS Code's warning yellow is 3.1:1 on white, its error red 4.2:1 on Monokai. */
+  --mdl-ink: black;
+  --mdl-ink-amount: 30%;
 }
 body.vscode-dark,
 body.vscode-high-contrast:not(.vscode-high-contrast-light) {
-  --mdl-tok-keyword: #ff7b72;
-  --mdl-tok-string: #a5d6ff;
-  --mdl-tok-number: #79c0ff;
-  --mdl-tok-comment: #8b949e;
-  --mdl-tok-name: #d2a8ff;
-  --mdl-tok-type: #ffa657;
-  --mdl-tok-heading: #79c0ff;
-  --mdl-note: #4493f8;
-  --mdl-tip: #3fb950;
-  --mdl-important: #ab7df8;
-  --mdl-warning: #d29922;
-  --mdl-caution: #f85149;
+  --mdl-tok-keyword: var(--vscode-debugTokenExpression-name, #c586c0);
+  --mdl-tok-string: var(--vscode-debugTokenExpression-string, #ce9178);
+  --mdl-tok-number: var(--vscode-debugTokenExpression-number, #b5cea8);
+  --mdl-tok-constant: var(--vscode-debugTokenExpression-boolean, #4e94ce);
+  --mdl-tok-comment: var(--mdl-dim);
+  --mdl-tok-name: var(--vscode-symbolIcon-functionForeground, #b180d7);
+  --mdl-tok-type: var(--vscode-symbolIcon-classForeground, #ee9d28);
+  --mdl-tok-heading: var(--vscode-debugTokenExpression-boolean, #4e94ce);
+  --mdl-note: var(--vscode-editorInfo-foreground, #59a4f9);
+  --mdl-tip: var(--vscode-charts-green, #89d185);
+  --mdl-important: var(--vscode-charts-purple, #b180d7);
+  --mdl-warning: var(--vscode-editorWarning-foreground, #cca700);
+  --mdl-caution: var(--vscode-editorError-foreground, #f14c4c);
+  --mdl-ink: white;
+  --mdl-ink-amount: 20%;
+}
+/* High contrast themes choose their colours for contrast already. */
+body.vscode-high-contrast {
+  --mdl-ink-amount: 0%;
 }
 
 html,
@@ -124,6 +150,8 @@ body {
 }
 .mdl-toolbar button:hover {
   background: var(--mdl-hover);
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
+  outline-offset: -1px;
 }
 .mdl-toolbar button:focus-visible,
 .mdl-heading:focus-visible {
@@ -164,6 +192,9 @@ body {
 .mdl-modes button.mdl-active:hover {
   background: var(--mdl-button-bg);
   color: var(--mdl-button-fg);
+  /* High contrast themes draw buttons black on black: the outline shows which mode is on. */
+  outline: 1px solid var(--mdl-outline-active);
+  outline-offset: -1px;
 }
 
 .mdl-toolbar .mdl-export {
@@ -291,12 +322,14 @@ body {
 #app .tok-inserted {
   color: var(--mdl-tok-string);
 }
-#app .tok-number,
+#app .tok-number {
+  color: var(--mdl-tok-number);
+}
 #app .tok-bool,
 #app .tok-atom,
 #app .tok-literal,
 #app .tok-propertyName {
-  color: var(--mdl-tok-number);
+  color: var(--mdl-tok-constant);
 }
 #app .tok-comment,
 #app .tok-meta {
@@ -431,6 +464,7 @@ body {
   background: var(--mdl-code-bg);
   border-radius: 4px;
   padding: 0.12em 0.32em;
+  box-shadow: inset 0 0 0 1px var(--mdl-outline);
 }
 #app .cm-md-link {
   color: var(--mdl-link);
@@ -470,41 +504,52 @@ body {
   padding-left: 30px;
   background: linear-gradient(var(--mdl-quote), var(--mdl-quote)) 13px 0 / 3px 100% no-repeat;
 }
+/* GitHub alerts: a tinted box with a coloured bar, and a title row with the kind's icon.
+   Each line is its own element, so the first and last lines carry the box's top and bottom. */
 #app .cm-md-alert {
+  --mdl-alert: var(--mdl-note);
   color: inherit;
+  border-left-color: var(--mdl-alert);
+  background-color: color-mix(in srgb, var(--mdl-alert) 10%, transparent);
+  padding-right: 14px;
+  box-shadow: inset -1px 0 var(--mdl-outline);
 }
-#app .cm-md-alert-note {
-  border-left-color: var(--mdl-note);
+#app .cm-md-alert-first {
+  padding-top: 8px;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  box-shadow: inset -1px 1px var(--mdl-outline);
+}
+#app .cm-md-alert-last {
+  padding-bottom: 8px;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  box-shadow: inset -1px -1px var(--mdl-outline);
+}
+#app .cm-md-alert-first.cm-md-alert-last {
+  box-shadow: inset -1px 1px var(--mdl-outline), inset 0 -1px var(--mdl-outline);
 }
 #app .cm-md-alert-tip {
-  border-left-color: var(--mdl-tip);
+  --mdl-alert: var(--mdl-tip);
 }
 #app .cm-md-alert-important {
-  border-left-color: var(--mdl-important);
+  --mdl-alert: var(--mdl-important);
 }
 #app .cm-md-alert-warning {
-  border-left-color: var(--mdl-warning);
+  --mdl-alert: var(--mdl-warning);
 }
 #app .cm-md-alert-caution {
-  border-left-color: var(--mdl-caution);
+  --mdl-alert: var(--mdl-caution);
 }
 #app .cm-md-alert-label {
   font-weight: 600;
+  color: color-mix(in srgb, var(--mdl-alert), var(--mdl-ink) var(--mdl-ink-amount));
 }
-#app .cm-md-alert-note .cm-md-alert-label {
-  color: var(--mdl-note);
-}
-#app .cm-md-alert-tip .cm-md-alert-label {
-  color: var(--mdl-tip);
-}
-#app .cm-md-alert-important .cm-md-alert-label {
-  color: var(--mdl-important);
-}
-#app .cm-md-alert-warning .cm-md-alert-label {
-  color: var(--mdl-warning);
-}
-#app .cm-md-alert-caution .cm-md-alert-label {
-  color: var(--mdl-caution);
+#app .cm-md-alert-icon {
+  width: 1em;
+  height: 1em;
+  margin-right: 0.5em;
+  vertical-align: -0.15em;
 }
 
 /* Lists: the marker and indentation use the fixed-width font so wrapped lines align. */
@@ -567,14 +612,21 @@ body {
   line-height: 1.55;
   padding-left: 14px;
   padding-right: 14px;
+  /* High contrast themes draw code blocks black on black, so they get an outline. */
+  box-shadow: inset 1px 0 var(--mdl-outline), inset -1px 0 var(--mdl-outline);
 }
 #app .cm-md-codeblock-first {
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
+  box-shadow: inset 1px 1px var(--mdl-outline), inset -1px 0 var(--mdl-outline);
 }
 #app .cm-md-codeblock-last {
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
+  box-shadow: inset 1px -1px var(--mdl-outline), inset -1px 0 var(--mdl-outline);
+}
+#app .cm-md-codeblock-first.cm-md-codeblock-last {
+  box-shadow: inset 0 0 0 1px var(--mdl-outline);
 }
 #app .cm-md-fence-hidden {
   font-size: 7px;
@@ -625,13 +677,18 @@ body {
   padding-left: 14px;
   padding-right: 14px;
 }
+#app .cm-md-frontmatter {
+  box-shadow: inset 1px 0 var(--mdl-outline), inset -1px 0 var(--mdl-outline);
+}
 #app .cm-md-frontmatter-first {
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
+  box-shadow: inset 1px 1px var(--mdl-outline), inset -1px 0 var(--mdl-outline);
 }
 #app .cm-md-frontmatter-last {
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
+  box-shadow: inset 1px -1px var(--mdl-outline), inset -1px 0 var(--mdl-outline);
 }
 #app .cm-md-frontmatter-chip {
   padding: 2px var(--mdl-line-pad) 8px;
@@ -780,7 +837,7 @@ body {
   background: var(--mdl-widget);
   border: 1px solid var(--mdl-border);
   border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 2px 8px var(--mdl-shadow);
   font-family: var(--mdl-font);
   font-size: 11px;
   line-height: 1;
@@ -844,7 +901,7 @@ body {
   color: var(--mdl-fg);
   border: 1px solid var(--mdl-border);
   border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 14px var(--mdl-shadow);
   font-family: var(--mdl-font);
   font-size: 12px;
   line-height: 1;
@@ -932,7 +989,7 @@ body {
   color: var(--mdl-fg);
   border: 1px solid var(--mdl-border);
   border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 14px var(--mdl-shadow);
   font-family: var(--mdl-font);
   font-size: 12px;
 }
@@ -1110,6 +1167,8 @@ body {
 }
 #app .mdl-find button:hover:not(:disabled) {
   background: var(--mdl-hover);
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
+  outline-offset: -1px;
 }
 #app .mdl-find button:disabled {
   opacity: 0.4;

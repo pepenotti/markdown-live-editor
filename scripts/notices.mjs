@@ -22,6 +22,9 @@ const rows = [...names].sort().map((name) => {
   const repo = typeof pkg.repository === 'string' ? pkg.repository : (pkg.repository?.url ?? '');
   return { name, line: `| ${name} | ${pkg.version} | ${pkg.license ?? 'see package'} | ${repo.replace(/^git\+/, '').replace(/\.git$/, '')} |`, license: String(pkg.license ?? 'unknown') };
 });
+// Copied into the source rather than installed: the five alert icons in src/shared/alerts.ts.
+rows.push({ name: '@primer/octicons', line: '| @primer/octicons (5 icons, in src/shared/alerts.ts) | 19.40.0 | MIT | https://github.com/primer/octicons |', license: 'MIT' });
+rows.sort((a, b) => a.name.localeCompare(b.name));
 writeFileSync(
   'THIRD-PARTY-NOTICES.md',
   `# Third-party notices\n\nThe shipped bundles in \`dist/\` include the packages below. Each is distributed under the licence shown; the full licence text ships with the package and is available at its repository.\n\n| Package | Version | Licence | Repository |\n| :------ | :------ | :------ | :--------- |\n${rows.map((r) => r.line).join('\n')}\n`,

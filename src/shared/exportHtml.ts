@@ -2,6 +2,7 @@
 // Pure code: nothing here touches VS Code or the file system.
 import katex from 'katex';
 import MarkdownIt, { type MarkdownIt as Markdown, type Token } from 'markdown-it';
+import { ALERT_MARKER, type AlertKind, alertIconSvg, alertTitle } from './alerts';
 import { EMAIL_WRAPPER, emailFootnotes, emailPlugin, type EmailState } from './emailHtml';
 import { isLocalSource } from './embed';
 import { exportCss } from './exportCss';
@@ -121,8 +122,6 @@ function swapHtmlImages(html: string, images: ReadonlyMap<string, string> | unde
 
 const isMermaid = (token: Token) => token.type === 'fence' && /^mermaid(?:\s|$)/i.test(token.info.trim());
 
-const ALERT = /^\[!(note|tip|important|warning|caution)\]$/i;
-
 function build(): Markdown {
   const md = new MarkdownIt({
     html: true,
@@ -179,19 +178,20 @@ function build(): Markdown {
   });
 
   // GitHub alerts: a quote whose first line is "[!NOTE]", "[!TIP]", "[!IMPORTANT]", "[!WARNING]" or "[!CAUTION]".
+  // As on GitHub (and in the editor, see alerts.ts), only a quote at the top level of the document.
   md.core.ruler.push('alerts', (state) => {
     const tokens = state.tokens;
     for (let i = 2; i < tokens.length; i++) {
       const quote = tokens[i - 2];
-      if (tokens[i].type !== 'inline' || tokens[i - 1].type !== 'paragraph_open' || quote.type !== 'blockquote_open') continue;
+      if (tokens[i].type !== 'inline' || tokens[i - 1].type !== 'paragraph_open' || quote.type !== 'blockquote_open' || quote.level !== 0) continue;
       const children = tokens[i].children ?? [];
       const first = children[0];
-      const kind = first?.type === 'text' ? ALERT.exec(first.content.trim())?.[1].toLowerCase() : undefined;
+      const kind = first?.type === 'text' ? (ALERT_MARKER.exec(first.content.trim())?.[1].toLowerCase() as AlertKind | undefined) : undefined;
       // The label has its line to itself.
       if (!first || !kind || (children[1] && children[1].type !== 'softbreak' && children[1].type !== 'hardbreak')) continue;
       quote.attrJoin('class', `alert alert-${kind}`);
       const label = new state.Token('html_inline', '', 0);
-      label.content = `<strong class="alert-title">${kind[0].toUpperCase()}${kind.slice(1)}</strong>`;
+      label.content = `<strong class="alert-title" data-alert="${kind}">${alertIconSvg(kind)}${alertTitle(kind)}</strong>`;
       children[0] = label;
       if (children[1]) {
         children[1].type = 'hardbreak';

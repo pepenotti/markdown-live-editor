@@ -2,6 +2,7 @@
 // keep an exported file safe (what may be embedded, what may load, how the browser is run).
 import MarkdownIt from 'markdown-it';
 import { describe, expect, it } from 'vitest';
+import { type AlertKind, alertIconSvg } from '../../src/shared/alerts';
 import { imageTarget, isInside, isLocalSource, looksLikeImage, normalizePath } from '../../src/shared/embed';
 import { contentSecurityPolicy, localImageSources, renderDocument, renderMarkdown, stripFrontMatter } from '../../src/shared/exportHtml';
 import { markdownParser } from '../../src/shared/markdownSyntax';
@@ -74,12 +75,23 @@ describe('alerts in exported HTML', () => {
   it('turns the five GitHub alerts into callouts', () => {
     for (const kind of ['note', 'tip', 'important', 'warning', 'caution']) {
       const title = kind[0].toUpperCase() + kind.slice(1);
+      const icon = alertIconSvg(kind as AlertKind);
       expect(html(`> [!${kind.toUpperCase()}]\n> Text *here*.`)).toBe(
-        `<blockquote class="alert alert-${kind}">\n<p><strong class="alert-title">${title}</strong><br>\nText <em>here</em>.</p>\n</blockquote>\n`,
+        `<blockquote class="alert alert-${kind}">\n<p><strong class="alert-title" data-alert="${kind}">${icon}${title}</strong><br>\nText <em>here</em>.</p>\n</blockquote>\n`,
       );
     }
-    expect(html('> [!note]\n>\n> Later paragraph.')).toContain('<p><strong class="alert-title">Note</strong></p>\n<p>Later paragraph.</p>');
+    expect(html('> [!note]\n>\n> Later paragraph.')).toContain(`<p><strong class="alert-title" data-alert="note">${alertIconSvg('note')}Note</strong></p>\n<p>Later paragraph.</p>`);
     expect(renderDocument('> [!TIP]\n> x').html).toContain('.alert-tip{');
+  });
+
+  it('draws the title with its icon and the box tinted, as in the editor', () => {
+    expect(renderDocument('> [!TIP]\n> x').html).toContain('background:color-mix(in srgb,var(--alert) 10%,transparent)');
+    expect(alertIconSvg('caution')).toMatch(/^<svg class="alert-icon" viewBox="0 0 16 16"[^>]*aria-hidden="true"[^>]*><path fill="currentColor" d="M[^"]+"\/><\/svg>$/);
+  });
+
+  it('keeps lists and code inside an alert', () => {
+    const out = html('> [!IMPORTANT]\n> Steps:\n>\n> - one\n> - two\n>\n> ```js\n> let a = 1;\n> ```');
+    expect(out).toMatch(/^<blockquote class="alert alert-important">\n<p><strong class="alert-title"[^]*?Important<\/strong><br>\nSteps:<\/p>\n<ul>\n<li>one<\/li>\n<li>two<\/li>\n<\/ul>\n<pre><code class="language-js">/);
   });
 
   it('leaves other quotes as they are', () => {
@@ -87,6 +99,9 @@ describe('alerts in exported HTML', () => {
     expect(html('> [!SOMETHING]\n> x')).not.toContain('alert');
     expect(html('> text\n> [!NOTE]')).not.toContain('alert');
     expect(html('[!NOTE]\ntext')).toBe('<p>[!NOTE]\ntext</p>\n');
+    // As on GitHub, an alert cannot sit inside another quote or a list.
+    expect(html('> > [!NOTE]\n> > x')).not.toContain('alert');
+    expect(html('- > [!NOTE]\n  > x')).not.toContain('alert');
   });
 });
 

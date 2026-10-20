@@ -49,8 +49,28 @@ Text before ![a photo](assets/photo.png "Hills at dusk") and text after it.
 > [!NOTE]
 > Useful information the reader should know.
 
+> [!TIP]
+> Helpful advice for doing things better.
+>
+> A second paragraph, with a list:
+>
+> - one point
+> - another point
+
+> [!IMPORTANT]
+> Key information, with `inline code` and a block:
+>
+> ```sh
+> npm test
+> ```
+
 > [!WARNING]
 > Something that needs care.
+
+> [!CAUTION]
+> Risks or negative outcomes of an action.
+
+> [!NOTE] Text after the marker makes a plain quote, as on GitHub.
 
 ## Code
 

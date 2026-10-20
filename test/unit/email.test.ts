@@ -182,7 +182,10 @@ describe('HTML for pasting into a mail', () => {
     const out = html('- [ ] open\n- [x] done\n\n> [!WARNING]\n> Careful.\n\nText[^n] again[^n] and[^m].\n\n[^m]: Second, with a [link](https://example.com).\n[^n]: First *note*.\n');
     expect(out).toMatch(/<ul style="[^"]*list-style:none[^"]*">\n<li style="margin:2px 0">☐ open<\/li>\n<li style="margin:2px 0">☑ done<\/li>/);
     expect(out).not.toContain('<input');
-    expect(out).toMatch(/<blockquote style="margin:0 0 12px;padding:8px 12px;border-left:4px solid #9a6700">\n<p style="[^"]+"><strong style="color:#9a6700">Warning<\/strong><br>\nCareful\.<\/p>/);
+    // The same box as in the editor and the export: GitHub's colour as the bar and title, at 10% as the background.
+    expect(out).toMatch(
+      /<blockquote style="margin:0 0 12px;padding:8px 12px 1px;border-left:4px solid #9a6700;border-radius:6px;background-color:#f5f0e6;color:#1f2328">\n<p style="[^"]+"><strong style="color:#9a6700">Warning<\/strong><br>\nCareful\.<\/p>/,
+    );
     expect(out).toContain('Text<sup style="font-size:75%;line-height:0">[1]</sup> again<sup style="font-size:75%;line-height:0">[1]</sup> and<sup style="font-size:75%;line-height:0">[2]</sup>.');
     expect(out).toMatch(/<hr style="[^"]+">\n<ol style="[^"]+">\n<li style="margin:2px 0" value="1">First <em>note<\/em>\.<\/li>\n<li style="margin:2px 0" value="2">Second, with a <a href="https:\/\/example\.com" style="[^"]+">link<\/a>\.<\/li>\n<\/ol>/);
     expect(out).not.toMatch(/href="#/);

@@ -1,0 +1,23 @@
+{
+  "note": "Colour themes that ship with VS Code, copied from github.com/microsoft/vscode (extensions/theme-*/themes) under the MIT License in LICENSE.txt. uiTheme is the value from each theme extension's package.json. Used by harness/index.html?vstheme=<file>.",
+  "themes": [
+    { "file": "dark_modern.json", "label": "Dark Modern", "uiTheme": "vs-dark" },
+    { "file": "light_modern.json", "label": "Light Modern", "uiTheme": "vs" },
+    { "file": "2026-dark.json", "label": "Dark 2026", "uiTheme": "vs-dark" },
+    { "file": "2026-light.json", "label": "Light 2026", "uiTheme": "vs" },
+    { "file": "dark_plus.json", "label": "Dark+", "uiTheme": "vs-dark" },
+    { "file": "light_plus.json", "label": "Light+", "uiTheme": "vs" },
+    { "file": "dark_vs.json", "label": "Visual Studio Dark", "uiTheme": "vs-dark" },
+    { "file": "light_vs.json", "label": "Visual Studio Light", "uiTheme": "vs" },
+    { "file": "hc_black.json", "label": "Dark High Contrast", "uiTheme": "hc-black" },
+    { "file": "hc_light.json", "label": "Light High Contrast", "uiTheme": "hc-light" },
+    { "file": "monokai-color-theme.json", "label": "Monokai", "uiTheme": "vs-dark" },
+    { "file": "solarized-dark-color-theme.json", "label": "Solarized Dark", "uiTheme": "vs-dark" },
+    { "file": "solarized-light-color-theme.json", "label": "Solarized Light", "uiTheme": "vs" },
+    { "file": "abyss-color-theme.json", "label": "Abyss", "uiTheme": "vs-dark" },
+    { "file": "kimbie-dark-color-theme.json", "label": "Kimbie Dark", "uiTheme": "vs-dark" },
+    { "file": "Red-color-theme.json", "label": "Red", "uiTheme": "vs-dark" },
+    { "file": "tomorrow-night-blue-color-theme.json", "label": "Tomorrow Night Blue", "uiTheme": "vs-dark" },
+    { "file": "quietlight-color-theme.json", "label": "Quiet Light", "uiTheme": "vs" }
+  ]
+}

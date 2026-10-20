@@ -7,6 +7,7 @@ import { foldable, foldedRanges, syntaxTree } from '@codemirror/language';
 import { type EditorState, type Range, RangeSet, RangeValue } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { type AlertKind, alertKindOfLine } from '../../shared/alerts';
 import { renderConfig } from '../config';
 import { getAttr, imgTags, isLoneImg } from '../htmlTag';
 import { footnotes, linkInfo } from '../links';
@@ -75,10 +76,24 @@ function lineDeco(cls: string, style?: string): Decoration {
   return d;
 }
 
-const ALERT = /^\[!(note|tip|important|warning|caution)\]$/i;
 /** "[ ]" is three characters in the source; the checkbox drawn for it is two wide (see .cm-md-checkbox). */
 const CHECKBOX_SOURCE_WIDTH = 3;
 const CHECKBOX_WIDTH = 2;
+
+/** The kind of GitHub alert a quote is, or undefined. Only a quote at the top level can be one, as on GitHub. */
+export function alertOf(state: EditorState, quote: SyntaxNode): AlertKind | undefined {
+  if (quote.name !== 'Blockquote' || quote.parent?.name !== 'Document') return undefined;
+  return alertKindOfLine(state.doc.lineAt(quote.from).text);
+}
+
+/** The kind of alert whose "[!NOTE]" marker this link is, or undefined. */
+function alertLabel(state: EditorState, link: SyntaxNode): AlertKind | undefined {
+  const paragraph = link.parent;
+  const quote = paragraph?.parent;
+  if (paragraph?.name !== 'Paragraph' || paragraph.from !== link.from || !quote) return undefined;
+  const kind = alertOf(state, quote);
+  return kind && state.doc.lineAt(quote.from).number === state.doc.lineAt(link.from).number ? kind : undefined;
+}
 
 /**
  * Builds the decorations for the given ranges of the document.
@@ -219,12 +234,11 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
 
           case 'Link': {
             const node = ref.node;
-            const text = doc.sliceString(from, to);
-            const alert = ALERT.exec(text);
-            if (alert && node.parent?.name === 'Paragraph' && node.parent.from === from && node.parent.parent?.name === 'Blockquote') {
+            const alert = alertLabel(state, node);
+            if (alert) {
               if (lineActive(from)) mark('cm-md-mark', from, to);
               else {
-                decos.push(Decoration.replace({ widget: new AlertLabelWidget(alert[1]) }).range(from, to));
+                decos.push(Decoration.replace({ widget: new AlertLabelWidget(alert) }).range(from, to));
                 atom(from, to, 'inline');
               }
               return false;
@@ -344,22 +358,21 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
           case 'Blockquote': {
             let nested = false;
             for (let p = ref.node.parent; p; p = p.parent) if (p.name === 'Blockquote') nested = true;
-            const firstLine = doc.lineAt(from);
-            const alert = /^\s*>\s*\[!(note|tip|important|warning|caution)\]\s*$/i.exec(firstLine.text);
-            const cls = 'cm-md-quote' + (nested ? ' cm-md-quote-nested' : '') + (alert ? ` cm-md-alert cm-md-alert-${alert[1].toLowerCase()}` : '');
-            eachLine(from, to, (lineFrom) => decos.push(lineDeco(cls).range(lineFrom)));
+            const alert = alertOf(state, ref.node);
+            const cls = 'cm-md-quote' + (nested ? ' cm-md-quote-nested' : '') + (alert ? ` cm-md-alert cm-md-alert-${alert}` : '');
+            const first = doc.lineAt(from).number;
+            const last = doc.lineAt(to).number;
+            eachLine(from, to, (lineFrom, n) => {
+              // An alert is a box: its first and last lines carry its top and bottom edges.
+              const edge = alert ? (n === first ? ' cm-md-alert-first' : '') + (n === last ? ' cm-md-alert-last' : '') : '';
+              decos.push(lineDeco(cls + edge).range(lineFrom));
+            });
             return true;
           }
 
-          case 'QuoteMark': {
-            if (lineActive(from)) {
-              mark('cm-md-mark', from, to);
-            } else {
-              const end = doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
-              hide(from, end, 'leading');
-            }
+          case 'QuoteMark':
+            quoteMark(from, to);
             return false;
-          }
 
           case 'ListItem':
             listItem(ref.node);
@@ -387,9 +400,15 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
             fencedCode(ref.node);
             return false;
 
-          case 'CodeBlock':
-            eachLine(from, to, (lineFrom) => decos.push(lineDeco('cm-md-codeblock cm-md-codeblock-indented').range(lineFrom)));
+          case 'CodeBlock': {
+            const first = doc.lineAt(from).number;
+            const last = doc.lineAt(to).number;
+            eachLine(from, to, (lineFrom, n) => {
+              const edge = (n === first ? ' cm-md-codeblock-first' : '') + (n === last ? ' cm-md-codeblock-last' : '');
+              decos.push(lineDeco('cm-md-codeblock cm-md-codeblock-indented' + edge).range(lineFrom));
+            });
             return false;
+          }
 
           case 'HTMLBlock':
           case 'HTMLTag': {
@@ -505,7 +524,20 @@ export function collectInline(state: EditorState, ranges: readonly Span[]): Coll
       });
     }
 
+    /** A quote's ">" (and the space after it): hidden, unless the cursor is on its line. */
+    function quoteMark(from: number, to: number): void {
+      if (from < range.from || from > range.to) return;
+      if (lineActive(from)) {
+        mark('cm-md-mark', from, to);
+      } else {
+        const end = doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
+        hide(from, end, 'leading');
+      }
+    }
+
     function fencedCode(node: SyntaxNode): void {
+      // In a quote, the code's lines start with the quote's markers, which belong to the code block.
+      for (let child = node.firstChild; child; child = child.nextSibling) if (child.name === 'QuoteMark') quoteMark(child.from, child.to);
       const first = doc.lineAt(node.from);
       const last = doc.lineAt(node.to);
       const marks = node.getChildren('CodeMark');

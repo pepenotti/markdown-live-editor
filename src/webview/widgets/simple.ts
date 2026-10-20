@@ -2,6 +2,7 @@
 import { foldable, foldedRanges, foldEffect, syntaxTree, unfoldEffect } from '@codemirror/language';
 import { type EditorView, WidgetType } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
+import { type AlertKind, alertIconSvg, alertTitle } from '../../shared/alerts';
 import { MIN_IMAGE_WIDTH, resizeImage } from '../commands/image';
 
 function cssWidth(width: string): string {
@@ -192,8 +193,9 @@ export class RuleWidget extends WidgetType {
   }
 }
 
+/** An alert's title, drawn in place of its "[!NOTE]" marker: GitHub's icon and the kind's name. */
 export class AlertLabelWidget extends WidgetType {
-  constructor(readonly kind: string) {
+  constructor(readonly kind: AlertKind) {
     super();
   }
   override eq(other: AlertLabelWidget): boolean {
@@ -202,7 +204,9 @@ export class AlertLabelWidget extends WidgetType {
   override toDOM(): HTMLElement {
     const span = document.createElement('span');
     span.className = 'cm-md-alert-label';
-    span.textContent = this.kind[0].toUpperCase() + this.kind.slice(1).toLowerCase();
+    // Fixed markup from alerts.ts, not document text.
+    span.innerHTML = alertIconSvg(this.kind, 'cm-md-alert-icon');
+    span.append(alertTitle(this.kind));
     return span;
   }
   override ignoreEvent(): boolean {
