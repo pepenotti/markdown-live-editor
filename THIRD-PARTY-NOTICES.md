@@ -58,6 +58,7 @@ The shipped bundles in `dist/` include the packages below. Each is distributed u
 | @lezer/yaml | 1.0.4 | MIT | https://github.com/lezer-parser/yaml |
 | @marijn/find-cluster-break | 1.0.4 | MIT | https://code.haverbeke.berlin/marijn/find-cluster-break |
 | @mermaid-js/parser | 2.0.1 | MIT | https://github.com/mermaid-js/mermaid |
+| @primer/octicons (5 icons, in src/shared/alerts.ts) | 19.40.0 | MIT | https://github.com/primer/octicons |
 | @upsetjs/venn.js | 2.0.0 | MIT | https://github.com/upsetjs/venn.js |
 | chevrotain | 13.2.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain |
 | cose-base | 1.0.3 | MIT | https://github.com/iVis-at-Bilkent/cose-base |

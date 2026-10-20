@@ -549,7 +549,7 @@ suite('Seamless Markdown', () => {
     const features = vscode.Uri.file(path.join(dir, 'features-alerts.html'));
     await exportTo('seamlessMarkdown.exportHtml', features);
     const alerts = fs.readFileSync(features.fsPath, 'utf8');
-    assert.ok(alerts.includes('<blockquote class="alert alert-note">\n<p><strong class="alert-title">Note</strong><br>'), 'a note callout');
+    assert.match(alerts, /<blockquote class="alert alert-note">\n<p><strong class="alert-title" data-alert="note"><svg class="alert-icon"[^>]*><path fill="currentColor" d="[^"]+"\/><\/svg>Note<\/strong><br>/, 'a note callout with its icon');
     assert.ok(alerts.includes('<blockquote class="alert alert-warning">'), 'a warning callout');
   });
 

@@ -11,48 +11,23 @@
     <meta name="mdl-nonce" content="harness" />
     <title>Seamless Markdown harness</title>
     <link rel="stylesheet" href="../dist/webview.css" />
-    <style nonce="harness">
-      html.theme-dark {
-        --vscode-editor-background: #1f1f1f;
-        --vscode-editor-foreground: #cccccc;
-        --vscode-descriptionForeground: #9d9d9d;
-        --vscode-editorWidget-border: #454545;
-        --vscode-editorWidget-background: #252526;
-        --vscode-textLink-foreground: #4daafc;
-        --vscode-editorWarning-foreground: #cca700;
-        --vscode-textCodeBlock-background: #2b2b2b;
-        --vscode-textBlockQuote-border: #616161;
-        --vscode-editor-selectionBackground: #264f78;
-        --vscode-editor-inactiveSelectionBackground: #3a3d41;
-        --vscode-editorCursor-foreground: #aeafad;
-        --vscode-focusBorder: #0078d4;
-        --vscode-toolbar-hoverBackground: rgba(90, 93, 94, 0.31);
-        --vscode-input-background: #313131;
-        --vscode-input-foreground: #cccccc;
-        --vscode-input-border: #3c3c3c;
-        --vscode-button-background: #0078d4;
-        --vscode-button-foreground: #ffffff;
-        --vscode-list-activeSelectionBackground: #04395e;
-        --vscode-list-activeSelectionForeground: #ffffff;
-        --vscode-dropdown-background: #313131;
-        --vscode-dropdown-foreground: #cccccc;
-        --vscode-dropdown-border: #3c3c3c;
-        color-scheme: dark;
-      }
-    </style>
   </head>
   <body>
     <div id="app"></div>
     <script nonce="harness">
       // A stand-in for the extension host. Query: ?doc=features.md&mode=half&theme=dark
+      // ?vstheme=<file> loads a VS Code colour theme from harness/themes/ (see vscodeTheme.js);
+      // theme=dark is Dark Modern. Without either, the style sheet's own fallback colours are used.
       window.__MDL_HARNESS__ = true;
       (function () {
         const params = new URLSearchParams(location.search);
         const docName = params.get('doc') || 'features.md';
         // VS Code defines its theme variables on <html> and marks the theme on <body>.
-        const dark = params.get('theme') === 'dark';
-        document.documentElement.classList.toggle('theme-dark', dark);
-        document.body.className = dark ? 'vscode-dark' : 'vscode-light';
+        document.body.className = 'vscode-light';
+        const themeFile = params.get('vstheme') || (params.get('theme') === 'dark' ? 'dark_modern.json' : '');
+        const themeReady = themeFile
+          ? import('./vscodeTheme.js').then((m) => m.loadTheme(themeFile)).catch((err) => h.errors.push('theme: ' + err.message))
+          : Promise.resolve();
         const post = (m) => window.postMessage(m, '*');
         let saved = null;
         const h = (window.__harness = {
@@ -128,7 +103,9 @@
             if (msg.type === 'copied') h.copied.push(msg);
             switch (msg.type) {
               case 'ready':
-                fetch('../sample/' + docName)
+                // The document arrives once the theme is in place, as in VS Code.
+                themeReady
+                  .then(() => fetch('../sample/' + docName))
                   .then((r) => r.text())
                   .then((text) => {
                     h.mirror = text.replace(/\r\n?/g, '\n');

@@ -10,6 +10,7 @@
 //
 // Pure code: a markdown-it plugin that is active only while a document is rendered for email.
 import type { MarkdownIt, Token } from 'markdown-it';
+import { type AlertKind, alertTitle } from './alerts';
 import { isLocalSource } from './embed';
 import { escapeHtml } from './highlight';
 
@@ -48,7 +49,16 @@ const STYLE: Record<string, string> = {
   img: 'max-width:100%;height:auto',
 };
 
-const ALERT_COLOR: Record<string, string> = { note: '#0969da', tip: '#1a7f37', important: '#8250df', warning: '#9a6700', caution: '#cf222e' };
+/** GitHub's alert colours, and the same at 10% on white for the box (mail has no color-mix). */
+const ALERT_COLOR: Record<string, { text: string; tint: string }> = Object.fromEntries(
+  Object.entries({ note: '#0969da', tip: '#1a7f37', important: '#8250df', warning: '#9a6700', caution: '#cf222e' }).map(([kind, text]) => [kind, { text, tint: tint(text, 0.1) }]),
+);
+
+/** `hex` at `amount` opacity over white, as an opaque colour. */
+function tint(hex: string, amount: number): string {
+  const channel = (i: number) => Math.round(parseInt(hex.slice(i, i + 2), 16) * amount + 255 * (1 - amount));
+  return '#' + [1, 3, 5].map((i) => channel(i).toString(16).padStart(2, '0')).join('');
+}
 
 /** Links that still work once the text is in somebody's inbox. */
 const WORKS_IN_MAIL = /^(?:https?:\/\/|mailto:)/i;
@@ -121,16 +131,21 @@ export function emailPlugin(md: MarkdownIt, stateOf: (env: unknown) => EmailStat
           token.content = token.content.includes(' checked') ? '☑ ' : '☐ ';
           token.meta = { email: true };
           continue;
-        } else if (token.type === 'html_inline' && /^<strong class="alert-title">/.test(token.content)) {
-          const kind = />(\w+)</.exec(token.content)?.[1] ?? '';
-          token.content = `<strong style="color:${ALERT_COLOR[kind.toLowerCase()] ?? '#1f2328'}">${kind}</strong>`;
+        } else if (token.type === 'html_inline' && /^<strong class="alert-title"/.test(token.content)) {
+          // Web mail drops inline SVG, so the title is the kind's name without GitHub's icon.
+          const kind = (/data-alert="(\w+)"/.exec(token.content)?.[1] ?? 'note') as AlertKind;
+          const color = ALERT_COLOR[kind] ?? ALERT_COLOR.note;
+          token.content = `<strong style="color:${color.text}">${alertTitle(kind)}</strong>`;
           token.meta = { email: true };
           continue;
         }
         if (token.nesting === -1 || !Object.hasOwn(STYLE, token.tag)) continue;
         let style = STYLE[token.tag];
         const alert = token.tag === 'blockquote' ? /\balert-(\w+)/.exec(String(token.attrGet('class') ?? ''))?.[1] : undefined;
-        if (alert) style = `margin:0 0 12px;padding:8px 12px;border-left:4px solid ${ALERT_COLOR[alert] ?? BORDER}`;
+        if (alert) {
+          const color = ALERT_COLOR[alert] ?? ALERT_COLOR.note;
+          style = `margin:0 0 12px;padding:8px 12px 1px;border-left:4px solid ${color.text};border-radius:6px;background-color:${color.tint};color:#1f2328`;
+        }
         if (token.tag === 'ul' && /\bcontains-task-list\b/.test(String(token.attrGet('class') ?? ''))) style += ';list-style:none;padding-left:8px';
         // A fence or an indented block is one token with the tag "code"; it is rendered as a whole below.
         if (token.type !== 'fence' && token.type !== 'code_block') setStyle(token, style);
