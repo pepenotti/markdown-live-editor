@@ -84,3 +84,23 @@ describe('the Export menu of the toolbar', () => {
     expect(asked).toEqual([]);
   });
 });
+
+describe('the outline button of the toolbar', () => {
+  afterEach(() => document.body.replaceChildren());
+
+  it('asks for the outline to be toggled and shows whether it is open', () => {
+    const ran: [string, unknown][] = [];
+    const toolbar = createToolbar((id, arg) => ran.push([id, arg]), true);
+    document.body.append(toolbar.dom);
+    const button = toolbar.dom.querySelector<HTMLButtonElement>('.mdl-outline-toggle')!;
+    expect(button.getAttribute('aria-label')).toBe('Outline');
+    expect(button.title).toBe('Outline (⌥+O)');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    button.click();
+    expect(ran).toEqual([['toggleOutline', 'toolbar']]);
+    toolbar.setOutline(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    toolbar.setOutline(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+});

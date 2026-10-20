@@ -55,6 +55,7 @@ import { tableFromTSV } from './table/model';
 import { completions, insideCode } from './ui/completions';
 import { findWidget } from './ui/findWidget';
 import { copyRich, readClipboard } from './richCopy';
+import { createOutlinePanel, OUTLINE_OVERLAY_WIDTH, type OutlinePanel } from './ui/outlinePanel';
 import { createToolbar, type Toolbar } from './ui/toolbar';
 import { activeTableCell, focusTableAt, wrapInActiveCell } from './widgets/table';
 import { wikiLinkAt } from './wikiLinks';
@@ -75,6 +76,9 @@ const app = document.getElementById('app')!;
 let view: EditorView | undefined;
 let sync: SyncClient | undefined;
 let toolbar: Toolbar | undefined;
+let outline: OutlinePanel | undefined;
+/** What `init` said about the outline panel (for the tests: the panel itself stays shut in a narrow window). */
+let outlineAtInit = false;
 let config: EditorConfig;
 let isMac = /Mac/.test(navigator.platform);
 let testSession = false;
@@ -311,6 +315,9 @@ function runCommand(id: CommandId, arg?: unknown): void {
       return revealAnchor(String(arg ?? ''));
     case 'recheckLinks':
       return links.recheck();
+    case 'toggleOutline':
+      // From the toolbar the keyboard stays in the text; from a shortcut or the palette it goes to the filter.
+      return outline?.setOpen(!outline.isOpen(), { remember: true, focus: arg !== 'toolbar' });
     case 'focus':
       v.focus();
       return;
@@ -331,6 +338,7 @@ const KEYS: { key: string; id: CommandId }[] = [
   { key: 'Ctrl-Shift-]', id: 'headingUp' },
   { key: 'Ctrl-Shift-[', id: 'headingDown' },
   { key: 'Alt-m', id: 'cycleMode' },
+  { key: 'Alt-o', id: 'toggleOutline' },
 ];
 
 /* ---------- events ---------- */
@@ -494,6 +502,7 @@ function onUpdate(update: ViewUpdate): void {
     toolbar?.setMode(mode);
     host.post({ type: 'modeChanged', mode });
   }
+  outline?.update(update);
   if (update.docChanged || update.selectionSet) {
     toolbar?.setHeading(headingLevelAt(update.state));
     clearTimeout(statsTimer);
@@ -519,7 +528,18 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   toolbar.setExport(!!config.canExportPdf, config.exportPdfHint ?? '');
   const editorHost = document.createElement('div');
   editorHost.className = 'mdl-editor';
-  app.replaceChildren(toolbar.dom, editorHost);
+  outline = createOutlinePanel({
+    onChange(open) {
+      toolbar?.setOutline(open);
+      host.post({ type: 'outlineChanged', open });
+    },
+    onToggleKey: () => host.standalone && runCommand('toggleOutline'),
+  });
+  // The text and the outline side by side, below the toolbar.
+  const body = document.createElement('div');
+  body.className = 'mdl-body';
+  body.append(editorHost, outline.dom);
+  app.replaceChildren(toolbar.dom, body);
 
   const saved = host.getState();
   const length = message.text.length;
@@ -591,6 +611,11 @@ function createEditor(message: Extract<HostMessage, { type: 'init' }>): void {
   sync.epoch = message.epoch;
   view = new EditorView({ state, parent: editorHost });
   toolbar.setHeading(headingLevelAt(state));
+  outline.attach(view);
+  outlineAtInit = message.outlineOpen === true;
+  // Collapsed unless the user left it open. Where it would cover the text it starts collapsed.
+  if (message.outlineOpen && window.innerWidth >= OUTLINE_OVERLAY_WIDTH) outline.setOpen(true);
+  toolbar.setOutline(outline.isOpen());
 
   if (saved.scrollPos) requestAnimationFrame(() => view && (view.scrollDOM.scrollTop = saved.scrollPos!));
   view.scrollDOM.addEventListener('scroll', () => {
@@ -638,6 +663,8 @@ host.onMessage((message) => {
         mode: view?.state.field(modeField) ?? 'raw',
         epoch: sync?.epoch ?? -1,
         cursorLine: view ? view.state.doc.lineAt(view.state.selection.main.head).number - 1 : 0,
+        outlineOpen: !!outline?.isOpen(),
+        outlineAtInit,
         problems: [...problems],
         rendered: {
           diagrams: document.querySelectorAll('.cm-md-mermaid[data-state="done"] svg').length,

@@ -28,6 +28,9 @@ import { LinkChecker } from './linkCheck';
 import { FileWatch } from './fileWatch';
 import { NoteIndex, wikiLinksEnabled } from './notes';
 
+/** Key in `globalState` of whether the outline panel was left open. */
+const OUTLINE_OPEN_KEY = 'outlineOpen';
+
 export interface Stats {
   words: number;
   chars: number;
@@ -171,6 +174,7 @@ export class Session implements SyncTarget {
           baseUri: webview.asWebviewUri(vscode.Uri.joinPath(this.document.uri, '..')).toString(),
           rootUri: folder ? webview.asWebviewUri(folder.uri).toString() : null,
           isMac: process.platform === 'darwin',
+          outlineOpen: this.provider.outlineOpen,
           test: this.provider.context.extensionMode === vscode.ExtensionMode.Test || undefined,
         });
         this.ready = true;
@@ -200,6 +204,9 @@ export class Session implements SyncTarget {
         this.mode = message.mode;
         this.provider.rememberMode(this.document, message.mode);
         this.provider.sessionChanged();
+        break;
+      case 'outlineChanged':
+        void this.provider.rememberOutline(message.open === true);
         break;
       case 'stats':
         this.stats = { words: message.words, chars: message.chars, selWords: message.selWords };
@@ -473,6 +480,26 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
   rememberMode(document: vscode.TextDocument, mode: Mode): void {
     void this.context.workspaceState.update(this.modeKey(document), mode);
+  }
+
+  /* ---------- outline panel ---------- */
+
+  private outlineState: boolean | undefined;
+
+  /**
+   * Whether the outline panel inside the editor starts open. Closed until the user opens it;
+   * then remembered for the user, not the workspace, so it follows them across files and windows.
+   */
+  get outlineOpen(): boolean {
+    return (this.outlineState ??= this.context.globalState.get<boolean>(OUTLINE_OPEN_KEY) === true);
+  }
+
+  /** `undefined` forgets the choice, as for a first-time user. */
+  rememberOutline(open: boolean | undefined): Thenable<void> {
+    // Read back from here rather than from globalState, which can briefly hand back an earlier
+    // value when the panel is toggled quickly.
+    this.outlineState = open;
+    return this.context.globalState.update(OUTLINE_OPEN_KEY, open);
   }
 
   /* ---------- links ---------- */

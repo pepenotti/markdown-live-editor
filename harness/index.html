@@ -39,6 +39,12 @@
           copied: [],
           stats: null,
           mode: null,
+          /**
+           * Whether the outline panel starts open: what the real host keeps in globalState.
+           * Remembered in this browser like there; ?outline=1 or ?outline=0 overrides it.
+           */
+          outlineOpen: params.has('outline') ? params.get('outline') === '1' : (() => { try { return localStorage.getItem('mdl-outline') === '1'; } catch { return false; } })(),
+          outlineChanges: [],
           files: ['assets/diagram.svg', 'assets/photo.png', 'notes/other.md', 'features.md'],
           /** Heading slugs of the Markdown files the mock host knows, for links such as other.md#heading. */
           anchors: { 'notes/other.md': ['other-note'] },
@@ -134,6 +140,7 @@
                       baseUri: new URL('../sample', location.href).href,
                       rootUri: new URL('../sample', location.href).href,
                       isMac: /Mac/.test(navigator.platform),
+                      outlineOpen: h.outlineOpen,
                       test: params.get('test') === '1',
                     });
                   });
@@ -155,6 +162,11 @@
                 break;
               case 'modeChanged':
                 h.mode = msg.mode;
+                break;
+              case 'outlineChanged':
+                h.outlineOpen = msg.open;
+                h.outlineChanges.push(msg.open);
+                try { localStorage.setItem('mdl-outline', msg.open ? '1' : '0'); } catch {}
                 break;
               case 'request':
                 if (msg.kind === 'listFiles') respond(msg.reqId, { files: h.files.filter((f) => !msg.payload.imagesOnly || /\.(png|svg|jpe?g|gif)$/.test(f)) });

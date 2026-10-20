@@ -1,4 +1,4 @@
-// The toolbar above the editor: formatting buttons on the left, then Export and the mode switch on the right.
+// The toolbar above the editor: formatting buttons on the left, then Export, the mode switch and the outline toggle on the right.
 import { MODE_LABELS, MODES, type CommandId, type ExportAction, type Mode } from '../../shared/protocol';
 
 const svg = (body: string) =>
@@ -20,6 +20,7 @@ const ICONS = {
   rule: svg('<path d="M2 8h12"/><path d="M4 4.500h8M4 11.500h8" opacity=".35"/>'),
   export: svg('<path d="M8 10V2.500M5 5.500l3-3 3 3M3 9.500v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/>'),
   caret: svg('<path d="m5 6.500 3 3 3-3"/>'),
+  outline: svg('<path d="M2.500 3.500h11M5 6.500h8.500M5 9.500h8.500M7.500 12.500h6"/>'),
 };
 
 interface ButtonSpec {
@@ -59,6 +60,8 @@ export interface Toolbar {
   setVisible(visible: boolean): void;
   /** Whether a PDF can be made here, and the reason shown when it cannot. */
   setExport(canPdf: boolean, hint: string): void;
+  /** Shows whether the outline panel is open. */
+  setOutline(open: boolean): void;
 }
 
 const EXPORT_ITEMS: { action: ExportAction; label: string }[] = [
@@ -213,6 +216,18 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
   }
   dom.append(modes);
 
+  const outline = document.createElement('button');
+  outline.type = 'button';
+  outline.className = 'mdl-outline-toggle';
+  outline.innerHTML = ICONS.outline;
+  outline.title = `Outline (${keys('Alt+O')})`;
+  outline.setAttribute('aria-label', 'Outline');
+  outline.setAttribute('aria-pressed', 'false');
+  outline.setAttribute('aria-controls', 'mdl-outline-body');
+  outline.addEventListener('mousedown', (e) => e.preventDefault());
+  outline.addEventListener('click', () => run('toggleOutline', 'toolbar'));
+  dom.append(outline);
+
   return {
     dom,
     setMode(mode) {
@@ -235,6 +250,10 @@ export function createToolbar(run: (id: CommandId, arg?: unknown) => void, isMac
       pdf.title = canPdf ? '' : hint;
       pdfHint.textContent = canPdf ? '' : hint;
       pdfHint.hidden = canPdf;
+    },
+    setOutline(open) {
+      outline.setAttribute('aria-pressed', String(open));
+      outline.classList.toggle('mdl-active', open);
     },
   };
 }
