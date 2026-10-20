@@ -87,6 +87,7 @@ export type CommandId =
   | 'revealAnchor'
   | 'insertImagePaths'
   | 'recheckLinks'
+  | 'toggleOutline'
   | 'focus';
 
 export type HostMessage =
@@ -101,6 +102,8 @@ export type HostMessage =
       /** Webview URI of the workspace folder, used for paths that start with "/". */
       rootUri: string | null;
       isMac: boolean;
+      /** Whether the outline panel starts open. Remembered for the user, across files and windows. */
+      outlineOpen: boolean;
       /** Set by the integration tests. Unlocks `debugType`. */
       test?: boolean;
     }
@@ -163,6 +166,8 @@ export type WebviewMessage =
   | { type: 'flushed'; reqId: number }
   | { type: 'focus'; focused: boolean }
   | { type: 'modeChanged'; mode: Mode }
+  /** The user opened or closed the outline panel. */
+  | { type: 'outlineChanged'; open: boolean }
   | { type: 'stats'; words: number; chars: number; selWords: number }
   | { type: 'openLink'; href: string }
   | { type: 'openWikiLink'; target: string; heading: string }
@@ -180,6 +185,9 @@ export type WebviewMessage =
       epoch: number;
       /** Zero-based line of the cursor. */
       cursorLine: number;
+      /** Whether the outline panel is open, and whether `init` asked for it to start open. */
+      outlineOpen: boolean;
+      outlineAtInit: boolean;
       problems: string[];
       /** How many diagrams, formulas and wiki links are drawn on screen, and how many diagrams failed. */
       rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number };

@@ -452,6 +452,39 @@ suite('Seamless Markdown', () => {
     assert.strictEqual(document.isDirty, false);
   });
 
+  test('the outline panel starts collapsed, and the host remembers it open or closed for the next editor', async () => {
+    // A first-time user: nothing remembered.
+    await api.outlineRemembered(undefined, null);
+    try {
+      const first = await open('plain.md');
+      let state = await api.state(first.uri);
+      assert.strictEqual(state.outlineAtInit, false, 'init asks for a collapsed panel');
+      assert.strictEqual(state.outlineOpen, false, 'the panel starts collapsed');
+
+      await vscode.commands.executeCommand('seamlessMarkdown.toggleOutline');
+      await until(async () => (await api.outlineRemembered()) === true, 'the host to remember the panel open');
+      state = await api.state(first.uri);
+      assert.strictEqual(state.outlineOpen, true, 'the command opened the panel');
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+      // Another file, opened afterwards, is told to start with the panel open.
+      const second = await open('split.md');
+      state = await api.state(second.uri);
+      assert.strictEqual(state.outlineAtInit, true, 'init carries the remembered state');
+      assert.deepStrictEqual(state.problems, []);
+
+      await vscode.commands.executeCommand('seamlessMarkdown.toggleOutline');
+      await until(async () => (await api.outlineRemembered()) === false, 'the host to remember the panel closed');
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      const third = await open('plain.md');
+      state = await api.state(third.uri);
+      assert.strictEqual(state.outlineAtInit, false);
+      assert.strictEqual(state.outlineOpen, false);
+    } finally {
+      await api.outlineRemembered(undefined, null);
+    }
+  });
+
   test('copies the document as HTML', async () => {
     await open('plain.md');
     await vscode.env.clipboard.writeText('');

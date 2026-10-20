@@ -38,6 +38,7 @@ const EDITOR_COMMANDS: Record<string, [CommandId, unknown?]> = {
   rawMode: ['setMode', 'raw'],
   halfPreviewMode: ['setMode', 'half'],
   fullPreviewMode: ['setMode', 'full'],
+  toggleOutline: ['toggleOutline'],
 };
 
 function activeMarkdownUri(): vscode.Uri | undefined {
@@ -348,6 +349,11 @@ export function activate(context: vscode.ExtensionContext): unknown {
     state: async (uri: vscode.Uri) => (await only(uri)).debugState(),
     states: async (uri: vscode.Uri) => Promise.all(provider.sessionsFor(uri).map((s) => s.debugState())),
     mode: async (uri: vscode.Uri): Promise<Mode> => (await only(uri)).mode,
+    /** Whether the outline panel is remembered as open; `set` changes that first (undefined forgets it). */
+    outlineRemembered: async (_uri: vscode.Uri | undefined, set?: boolean | null) => {
+      if (set !== undefined) await provider.rememberOutline(set === null ? undefined : set);
+      return provider.outlineOpen;
+    },
     rendererLoaded: () => rendererLoaded(),
     /** Answers the next save dialog with `target` (undefined cancels it) and forgets what was shown before. */
     answerSaveDialog: (target: vscode.Uri | undefined) => {

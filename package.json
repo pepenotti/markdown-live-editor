@@ -261,6 +261,11 @@
         "category": "Seamless Markdown"
       },
       {
+        "command": "seamlessMarkdown.toggleOutline",
+        "title": "Toggle Outline",
+        "category": "Seamless Markdown"
+      },
+      {
         "command": "seamlessMarkdown.find",
         "title": "Find and Replace",
         "category": "Seamless Markdown"
@@ -377,6 +382,11 @@
       {
         "command": "seamlessMarkdown.cycleMode",
         "key": "alt+m",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+      },
+      {
+        "command": "seamlessMarkdown.toggleOutline",
+        "key": "alt+o",
         "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
       },
       {
@@ -532,6 +542,10 @@
         },
         {
           "command": "seamlessMarkdown.goToHeading",
+          "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
+          "command": "seamlessMarkdown.toggleOutline",
           "when": "activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
