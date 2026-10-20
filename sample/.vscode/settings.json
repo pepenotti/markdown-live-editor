@@ -1,0 +1,6 @@
+{
+  // Used by `npm run preview`: Markdown files in this folder open in Seamless Markdown.
+  "workbench.editorAssociations": {
+    "*.md": "seamlessMarkdown.editor"
+  }
+}

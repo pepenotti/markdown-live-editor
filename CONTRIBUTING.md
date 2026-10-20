@@ -22,6 +22,14 @@ How it is put together:
 - `src/webview` is the editor: CodeMirror 6 with the Lezer Markdown parser. The three modes are three levels of decoration over the same text, so nothing is ever converted to another format and back.
 - `src/shared` holds the message protocol between the two.
 
+## Trying your changes
+
+```bash
+npm run preview
+```
+
+builds the extension and opens a separate VS Code window running that build, with `sample/preview.md` open in Seamless Markdown. Your installed copy of the extension is not used in that window.
+
 ## Releasing
 
 `main` is protected: changes go in through a pull request, and the CI check has to pass.
