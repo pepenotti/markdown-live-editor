@@ -6,7 +6,7 @@
 
 - **One editor, not two.** The document renders as you type. Click any element to edit it.
 - **Your file stays yours.** It is always plain Markdown, and text you did not touch is never rewritten, so diffs stay clean.
-- **It behaves like VS Code.** Undo, save, split editors, source control and your colour theme all work as they do for any text file.
+- **It behaves like VS Code.** Undo, save, split editors and source control work as they do for any text file, and the colours follow your theme.
 
 ## Get started
 
@@ -60,7 +60,8 @@ Switch with the buttons at the top right or `Alt+M`. Your place is kept, and eac
 - `Cmd`/`Ctrl`+click follows web links, other Markdown files and `#heading` links.
 - Broken links are underlined and listed in the Problems panel: missing files, missing headings and missing reference definitions. Nothing is fetched from the network.
 - A table of contents that updates itself on save. Insert it with `/toc`.
-- Footnotes, GitHub alerts (`> [!NOTE]`), front matter and a **Markdown Outline** panel in the Explorer.
+- An **Outline** panel on the right of the editor that follows your position, with a heading filter. It starts collapsed; open it with the toolbar button or `Alt+O`.
+- GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!WARNING]` and the rest) as tinted boxes with icons, plus footnotes and front matter.
 - Optional wiki links (`[[Note]]`) with a Backlinks panel. Off by default.
 
 ### Export and share
@@ -95,6 +96,7 @@ Exported files contain no scripts and load nothing from the network.
 | Tick or untick a task | `Alt+C` |
 | Heading level up / down | `Ctrl+Shift+]` / `Ctrl+Shift+[` |
 | Go to heading | `Mod+Shift+O` |
+| Show or hide the outline | `Alt+O` |
 | Fold / unfold a section | `Mod+Alt+[` / `Mod+Alt+]` |
 | Find / find and replace | `Mod+F` / `Mod+H`, then `Enter` and `Shift+Enter` between matches |
 | Indent / outdent a list item | `Tab` / `Shift+Tab` |
@@ -139,7 +141,7 @@ All settings start with `seamlessMarkdown.`
 - **Resized images become HTML.** Markdown has no syntax for a size, so a resized image is written as an `<img>` tag with a `width`.
 - **Dropping files.** Hold `Shift` while dropping a file from the Explorer, as VS Code requires.
 - **Search across files.** Results in VS Code's Search panel open the file, but VS Code does not yet tell custom editors where the match is, so the editor cannot jump to it or highlight it. Press `Mod+F` in the file to find it. VS Code is working on the missing piece; this will follow once it is available to extensions.
-- **Outline and breadcrumbs.** VS Code does not offer its own Outline view or breadcrumb symbols to custom editors. Use the Markdown Outline panel and **Go to Heading** instead.
+- **Outline and breadcrumbs.** VS Code does not offer its own Outline view or breadcrumb symbols to custom editors. Use the editor's Outline panel and **Go to Heading** instead.
 - **HTML in a document** is shown as source. An `<img>` tag is shown as the picture.
 - **Not drawn:** diagram languages other than Mermaid, and tables that are indented or inside a list or quote.
 - **No side-by-side view.** The point of the editor is that you do not need one.
