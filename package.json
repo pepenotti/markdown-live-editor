@@ -127,7 +127,7 @@
       },
       {
         "command": "seamlessMarkdown.pickMode",
-        "title": "Choose Mode…",
+        "title": "Choose Mode\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -177,7 +177,7 @@
       },
       {
         "command": "seamlessMarkdown.insertImage",
-        "title": "Insert Image…",
+        "title": "Insert Image\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -257,7 +257,7 @@
       },
       {
         "command": "seamlessMarkdown.goToHeading",
-        "title": "Go to Heading…",
+        "title": "Go to Heading\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -292,17 +292,17 @@
       },
       {
         "command": "seamlessMarkdown.exportHtml",
-        "title": "Export as HTML…",
+        "title": "Export as HTML\u2026",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.exportPdf",
-        "title": "Export as PDF…",
+        "title": "Export as PDF\u2026",
         "category": "Seamless Markdown"
       },
       {
         "command": "seamlessMarkdown.emailDocument",
-        "title": "Email Document…",
+        "title": "Email Document\u2026",
         "category": "Seamless Markdown"
       },
       {
@@ -320,109 +320,109 @@
       {
         "command": "seamlessMarkdown.toggleBold",
         "key": "ctrl+b",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+b"
       },
       {
         "command": "seamlessMarkdown.toggleItalic",
         "key": "ctrl+i",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+i"
       },
       {
         "command": "seamlessMarkdown.toggleStrikethrough",
         "key": "alt+shift+5",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.toggleInlineCode",
         "key": "ctrl+e",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+e"
       },
       {
         "command": "seamlessMarkdown.insertLink",
         "key": "ctrl+l",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+l"
       },
       {
         "command": "seamlessMarkdown.toggleBulletList",
         "key": "ctrl+shift+8",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+8"
       },
       {
         "command": "seamlessMarkdown.toggleNumberedList",
         "key": "ctrl+shift+7",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+7"
       },
       {
         "command": "seamlessMarkdown.toggleQuote",
         "key": "ctrl+shift+9",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+9"
       },
       {
         "command": "seamlessMarkdown.toggleTask",
         "key": "alt+c",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.headingIncrease",
         "key": "ctrl+shift+]",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.headingDecrease",
         "key": "ctrl+shift+[",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.cycleMode",
         "key": "alt+m",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.toggleOutline",
         "key": "alt+o",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus"
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)"
       },
       {
         "command": "seamlessMarkdown.find",
         "key": "ctrl+f",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+f"
       },
       {
         "command": "seamlessMarkdown.goToHeading",
         "key": "ctrl+shift+o",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+o"
       },
       {
         "command": "seamlessMarkdown.undo",
         "key": "ctrl+z",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+z"
       },
       {
         "command": "seamlessMarkdown.redo",
         "key": "ctrl+y",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+z"
       },
       {
         "command": "seamlessMarkdown.redo",
         "key": "ctrl+shift+z",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+shift+z"
       },
       {
         "command": "seamlessMarkdown.save",
         "key": "ctrl+s",
-        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && seamlessMarkdown.focus",
+        "when": "activeCustomEditorId == 'seamlessMarkdown.editor' && (seamlessMarkdown.focus || !inputFocus && !listFocus && !editorTextFocus && !terminalFocus && !sideBarFocus && !panelFocus && !auxiliaryBarFocus && !notificationFocus)",
         "mac": "cmd+s"
       }
     ],

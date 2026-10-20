@@ -368,6 +368,12 @@ function footnoteTarget(state: EditorState, pos: number): number | null {
 
 const domHandlers = EditorView.domEventHandlers({
   keydown(event) {
+    // Undo, redo and save are carried out by VS Code on the document. Typing is sent in short
+    // bursts, so hand over what is still unsent before VS Code acts on the key; otherwise undo
+    // straight after typing finds nothing to undo.
+    const mod = isMac ? event.metaKey : event.ctrlKey;
+    const key = event.key.toLowerCase();
+    if (mod && (key === 'z' || key === 'y' || key === 's')) sync?.flush();
     // A paste event does not say that Shift was held. Chromium's "paste and match style" (Ctrl/Cmd+Shift+V)
     // hands over a clipboard with only text/plain, but nothing promises that everywhere, and the
     // link and table shortcuts work from the plain text, so the key press is remembered as well.

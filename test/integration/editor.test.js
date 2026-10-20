@@ -144,6 +144,20 @@ suite('Seamless Markdown', () => {
     assert.deepStrictEqual(state.problems, []);
   });
 
+  test('undo straight after typing undoes that typing', async () => {
+    const { uri, document } = await open('plain.md');
+    const original = document.getText();
+    // Typing that is still in the editor's burst buffer when undo is pressed.
+    await api.post(uri, { type: 'debugType', text: 'typed ' });
+    await vscode.commands.executeCommand('seamlessMarkdown.undo');
+    await until(() => document.getText() === original, 'undo to remove the typing');
+    const state = await inStep(uri, document);
+    assert.strictEqual(state.text, lf(original));
+    await vscode.commands.executeCommand('seamlessMarkdown.redo');
+    await until(() => document.getText() === 'typed ' + original, 'redo to bring the typing back');
+    await inStep(uri, document);
+  });
+
   test('a change made outside the webview shows up in it', async () => {
     const { uri, document } = await open('plain.md');
     const edit = new vscode.WorkspaceEdit();
