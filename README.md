@@ -60,7 +60,7 @@ Switch with the buttons at the top right or `Alt+M`. Your place is kept, and eac
 - `Cmd`/`Ctrl`+click follows web links, other Markdown files and `#heading` links.
 - Broken links are underlined and listed in the Problems panel: missing files, missing headings and missing reference definitions. Nothing is fetched from the network.
 - A table of contents that updates itself on save. Insert it with `/toc`.
-- An **Outline** panel on the right of the editor that follows your position, with a heading filter. It starts collapsed; open it with the toolbar button or `Alt+O`.
+- An **Outline** panel on the right of the editor that follows your position, with a heading filter. It starts collapsed; open it with the toolbar button or `Alt+O`, and drag its edge to resize it.
 - GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!WARNING]` and the rest) as tinted boxes with icons, plus footnotes and front matter.
 - Optional wiki links (`[[Note]]`) with a Backlinks panel. Off by default.
 
@@ -82,7 +82,7 @@ Exported files contain no scripts and load nothing from the network.
 
 ### Shortcuts
 
-`Mod` is `Cmd` on macOS and `Ctrl` elsewhere. They apply only while this editor has focus, and can be changed in Keyboard Shortcuts.
+`Mod` is `Cmd` on macOS and `Ctrl` elsewhere, and `Alt` is `Option` (⌥) on macOS. They apply only while this editor has focus, and can be changed in Keyboard Shortcuts.
 
 | Action | Shortcut |
 | :----- | :------- |

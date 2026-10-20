@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- Fixed: undo straight after typing did nothing until you paused. `Cmd`/`Ctrl+Z` now undoes what you just typed, and shortcuts keep working when focus is on the toolbar or outline.
+- The paragraph style drop-down is drawn in your theme's colours instead of the system's.
+- The selected mode in the mode switch is easier to read in every theme.
+- The outline's arrow tab is replaced by a divider you drag to resize it, or drag to the edge to close it. Its width is remembered.
+
 ## 0.6.0
 
 - Outline panel inside the editor: docked on the right, collapsed by default, and remembered once you open it. It highlights where you are, has a heading filter, and jumps on click. Toggle it with the toolbar button or `Alt+O`.
