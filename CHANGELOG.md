@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Outline panel inside the editor: docked on the right, collapsed by default, and remembered once you open it. It highlights where you are, has a heading filter, and jumps on click. Toggle it with the toolbar button or `Alt+O`.
+- GitHub-style alerts: `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]` render as tinted boxes with GitHub's icon and a coloured title, in the editor, in exports and in emails.
+- Colours follow your VS Code theme: code highlighting, alerts and high-contrast outlines now come from the theme wherever VS Code shares them.
+- The toolbar wraps onto a second row in narrow editors instead of overlapping.
+- Fixed: code inside a block quote showed `> ` at the start of its lines.
+
 ## 0.5.1
 
 - Selected text now uses the normal system highlight, so a selection is always visible.
