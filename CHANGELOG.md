@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Code blocks and raw mode follow your `editor.tokenColorCustomizations`: the shorthands (`comments`, `strings`, `keywords`, `numbers`, `types`, `functions`), `textMateRules`, and sections for a theme such as `"[Monokai]"`. Colours and font styles both apply.
+
 ## 0.6.1
 
 - Fixed: undo straight after typing did nothing until you paused. `Cmd`/`Ctrl+Z` now undoes what you just typed, and shortcuts keep working when focus is on the toolbar or outline.

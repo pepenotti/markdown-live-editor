@@ -6,7 +6,7 @@
 
 - **One editor, not two.** The document renders as you type. Click any element to edit it.
 - **Your file stays yours.** It is always plain Markdown, and text you did not touch is never rewritten, so diffs stay clean.
-- **It behaves like VS Code.** Undo, save, split editors and source control work as they do for any text file, and the colours follow your theme.
+- **It behaves like VS Code.** Undo, save, split editors and source control work as they do for any text file, and the colours follow your theme, including your `editor.tokenColorCustomizations` in code blocks.
 
 ## Get started
 

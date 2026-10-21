@@ -158,6 +158,22 @@ suite('Seamless Markdown', () => {
     await inStep(uri, document);
   });
 
+  test('code highlighting follows editor.tokenColorCustomizations', async () => {
+    const { uri } = await open('plain.md');
+    const editor = vscode.workspace.getConfiguration('editor');
+    try {
+      await editor.update('tokenColorCustomizations', { comments: '#00aa00', textMateRules: [{ scope: 'keyword', settings: { fontStyle: 'bold' } }] }, vscode.ConfigurationTarget.Global);
+      const state = await until(async () => {
+        const s = await api.state(uri);
+        return s && s.settingsCss.includes('--mdl-tok-comment: #00aa00') ? s : null;
+      }, 'the token colours to reach the editor');
+      assert.ok(state.settingsCss.includes('#app .tok-keyword, #app .tok-operatorKeyword { font-style: normal; font-weight: 600;'));
+    } finally {
+      await editor.update('tokenColorCustomizations', undefined, vscode.ConfigurationTarget.Global);
+    }
+    await until(async () => (await api.state(uri)).settingsCss === '', 'the token colours to be cleared');
+  });
+
   test('a change made outside the webview shows up in it', async () => {
     const { uri, document } = await open('plain.md');
     const edit = new vscode.WorkspaceEdit();

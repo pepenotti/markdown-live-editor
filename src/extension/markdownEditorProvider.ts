@@ -21,6 +21,7 @@ import {
   type ExportAction,
   type RichCopyResult,
 } from '../shared/protocol';
+import { tokenCss } from '../shared/tokenColors';
 import { DocumentSync, type SyncTarget } from './documentSync';
 import { listFiles, pickImages, resolveUris, saveImage } from './images';
 import { readTocOptions } from './toc';
@@ -40,6 +41,28 @@ type DebugState = Extract<WebviewMessage, { type: 'debugState' }>;
 /** What the editor's Export menu needs to know. */
 export type ExportState = Pick<EditorConfig, 'canExportPdf' | 'exportPdfHint'>;
 
+/** The name of the colour theme in use, which `[Theme]` sections of the token colour setting refer to. */
+function themeName(): string {
+  const workbench = vscode.workspace.getConfiguration('workbench');
+  if (vscode.workspace.getConfiguration('window').get<boolean>('autoDetectColorScheme')) {
+    const kind = vscode.window.activeColorTheme.kind;
+    const key =
+      kind === vscode.ColorThemeKind.HighContrast
+        ? 'preferredHighContrastColorTheme'
+        : kind === vscode.ColorThemeKind.HighContrastLight
+          ? 'preferredHighContrastLightColorTheme'
+          : kind === vscode.ColorThemeKind.Dark
+            ? 'preferredDarkColorTheme'
+            : 'preferredLightColorTheme';
+    const preferred = workbench.get<string>(key);
+    if (preferred) return preferred;
+  }
+  return workbench.get<string>('colorTheme', '');
+}
+
+/** Settings outside this extension's own that change how the editor looks. */
+const EDITOR_LOOK_SETTINGS = ['editor.tokenColorCustomizations', 'workbench.colorTheme', 'window.autoDetectColorScheme', 'workbench.preferredDarkColorTheme', 'workbench.preferredLightColorTheme', 'workbench.preferredHighContrastColorTheme', 'workbench.preferredHighContrastLightColorTheme'];
+
 function readConfig(resource: vscode.Uri, exporting: ExportState): EditorConfig {
   const c = vscode.workspace.getConfiguration('seamlessMarkdown', resource);
   const mode = c.get<string>('defaultMode', 'half');
@@ -52,6 +75,7 @@ function readConfig(resource: vscode.Uri, exporting: ExportState): EditorConfig 
     tableAutoAlign: c.get<boolean>('tableAutoAlign', true),
     pasteRichText: c.get<boolean>('pasteRichText', true),
     customCss: c.get<string>('customCss', ''),
+    tokenCss: tokenCss(vscode.workspace.getConfiguration('editor', resource).get('tokenColorCustomizations'), themeName()),
     toc: readTocOptions(resource),
     spellCheck: c.get<boolean>('spellCheck', false),
     checkLinks: c.get<boolean>('checkLinks', true),
@@ -108,8 +132,9 @@ export class Session implements SyncTarget {
         this.sync.documentChanged(reason);
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('seamlessMarkdown', document.uri)) this.postConfig();
+        if (e.affectsConfiguration('seamlessMarkdown', document.uri) || EDITOR_LOOK_SETTINGS.some((key) => e.affectsConfiguration(key, document.uri))) this.postConfig();
       }),
+      vscode.window.onDidChangeActiveColorTheme(() => this.postConfig()),
     );
   }
 

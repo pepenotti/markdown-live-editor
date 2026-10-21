@@ -24,6 +24,8 @@ export interface EditorConfig {
   pasteRichText: boolean;
   /** Extra CSS rules applied to the editor. */
   customCss: string;
+  /** CSS for code highlighting from the user's `editor.tokenColorCustomizations`. */
+  tokenCss: string;
   /** Which headings a table of contents lists, and how. */
   toc: TocOptions;
   /** Turn on the browser's spell checking for the text. */
@@ -202,6 +204,8 @@ export type WebviewMessage =
       rendered: { diagrams: number; diagramErrors: number; math: number; wikiLinks: number };
       /** Reasons of the links currently underlined as broken, in document order. */
       brokenLinks: string[];
+      /** The CSS the settings added: token colours and custom CSS. */
+      settingsCss: string;
     };
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'bmp', 'ico'];

@@ -134,7 +134,8 @@ function applyConfig(next: EditorConfig): void {
     custom.nonce = nonce;
     document.head.append(custom);
   }
-  custom.textContent = next.customCss ?? '';
+  // The token colours come first, so that the user's own CSS can still override them.
+  custom.textContent = [next.tokenCss, next.customCss].filter(Boolean).join('\n');
   toolbar?.setVisible(next.showToolbar);
   toolbar?.setExport(!!next.canExportPdf, next.exportPdfHint ?? '');
   for (const cell of document.querySelectorAll<HTMLElement>('.cm-md-cell')) cell.spellcheck = !!next.spellCheck;
@@ -685,6 +686,7 @@ host.onMessage((message) => {
           wikiLinks: document.querySelectorAll('.cm-md-wikilink').length,
         },
         brokenLinks: view ? brokenLinkMessages(view.state) : [],
+        settingsCss: document.getElementById('mdl-custom-css')?.textContent ?? '',
       });
       break;
     case 'debugType':
