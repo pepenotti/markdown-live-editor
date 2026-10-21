@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2
 
 - Code blocks and raw mode follow your `editor.tokenColorCustomizations`: the shorthands (`comments`, `strings`, `keywords`, `numbers`, `types`, `functions`), `textMateRules`, and sections for a theme such as `"[Monokai]"`. Colours and font styles both apply.
 
