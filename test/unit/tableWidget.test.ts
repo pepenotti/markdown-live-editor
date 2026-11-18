@@ -222,4 +222,32 @@ describe('table widget', () => {
       document.body.textContent = '';
     }
   });
+
+  it('estimates the edited table at the height it was drawn, so the editor keeps it on screen', () => {
+    // A table with long cells is much taller than its row count suggests. If the widget made
+    // for an edit guessed from the rows alone, the editor laid the page out with a table a
+    // fraction of its height, dropped it with the focused cell, and scrolled away.
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains('cm-md-table-wrap') ? 3000 : 0;
+      },
+    });
+    try {
+      const v = open();
+      const target = cell(1, 1);
+      target.focus();
+      target.textContent = '12';
+      target.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      const source = v.state.doc.toString();
+      expect(source).toContain('| Pear   |  12 |');
+      expect(new TableWidget(source).estimatedHeight).toBe(3000);
+      expect(focused()).toBe('1,1');
+      // A table never drawn falls back to a guess from its rows.
+      expect(new TableWidget(TABLE.replace('Pear', 'Plum')).estimatedHeight).toBe(4 * 34 + 18);
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height);
+    }
+  });
 });
