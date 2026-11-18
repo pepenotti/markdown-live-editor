@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: typing in a tall table, one with long cells, could make the view jump away and send the next keys into the text below the table instead of the cell.
+
 ## 0.6.2
 
 - Code blocks and raw mode follow your `editor.tokenColorCustomizations`: the shorthands (`comments`, `strings`, `keywords`, `numbers`, `types`, `functions`), `textMateRules`, and sections for a theme such as `"[Monokai]"`. Colours and font styles both apply.

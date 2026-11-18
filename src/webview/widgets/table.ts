@@ -15,6 +15,21 @@ interface CellRef {
 
 const controllers = new WeakMap<HTMLElement, TableController>();
 
+/**
+ * The height each table was last drawn at, by its source. Every edit makes a new widget, and
+ * the editor lays the document out with the new widget's estimated height until it has been
+ * measured. A table with long cells is far taller than its row count suggests, and a low
+ * estimate made the editor think the part on screen lay past the table, so it dropped the
+ * table, the focused cell with it, and scrolled away.
+ */
+const drawnHeights = new Map<string, number>();
+
+function rememberHeight(source: string, height: number): void {
+  if (height <= 0) return;
+  if (drawnHeights.size >= 400 && !drawnHeights.has(source)) drawnHeights.clear();
+  drawnHeights.set(source, height);
+}
+
 /** The cell that currently has keyboard focus, in any table. */
 let editingCell: HTMLElement | null = null;
 
@@ -48,7 +63,7 @@ export class TableWidget extends WidgetType {
   }
 
   override get estimatedHeight(): number {
-    return (this.model ? this.model.rows.length : 2) * 34 + 18;
+    return drawnHeights.get(this.source) ?? (this.model ? this.model.rows.length : 2) * 34 + 18;
   }
 
   override toDOM(view: EditorView): HTMLElement {
@@ -248,7 +263,13 @@ class TableController {
     dom.addEventListener('keydown', (e) => this.onKeyDown(e));
     dom.addEventListener('paste', (e) => this.onPaste(e));
     dom.addEventListener('contextmenu', (e) => this.onContextMenu(e));
-    this.resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.fitTools());
+    this.resize =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            rememberHeight(this.widget.source, this.dom.offsetHeight);
+            this.fitTools();
+          });
     this.resize?.observe(dom);
   }
 
@@ -825,6 +846,8 @@ class TableController {
       this.pendingFocus = null;
       return;
     }
+    // The edited table is drawn at about the height it has now.
+    rememberHeight(next, this.dom.offsetHeight);
     this.view.dispatch({
       changes: { from: from + diff.from, to: from + diff.toA, insert: next.slice(diff.from, diff.toB) },
       annotations: bypassGuard.of(true),
