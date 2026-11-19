@@ -1021,6 +1021,52 @@ suite('Seamless Markdown', () => {
     assert.ok(uri);
   });
 
+  /* ---------- Copy as Formatted Text ---------- */
+
+  test('copies a document as formatted text without opening a mail app', async () => {
+    const { uri, document } = await open('features.md');
+    await inStep(uri, document);
+    await vscode.env.clipboard.writeText('');
+    api.resetUi();
+    const how = await vscode.commands.executeCommand('seamlessMarkdown.copyFormatted');
+    assert.deepStrictEqual(opened(), [], 'nothing is opened');
+    assert.strictEqual(lf(await vscode.env.clipboard.readText()), lf(document.getText()));
+    if (how === 'formatted') {
+      assert.deepStrictEqual(told('error'), []);
+      assert.deepStrictEqual(told('info'), ['Copied the document as formatted text. Left out, because pasted text cannot carry them: 4 local images.']);
+      const clipboard = await richClipboard(uri);
+      if (clipboard) {
+        assert.ok(clipboard.types.includes('text/html'), `flavours: ${clipboard.types}`);
+        assert.ok(/<h1 style="[^"]+">Seamless Markdown<\/h1>/.test(clipboard.html), 'headings with inline styles');
+      }
+    } else {
+      assert.strictEqual(windowFocused(), false, `formatted copy failed in a focused window: ${JSON.stringify(api.shown())}`);
+      console.log('      NOTE: this VS Code window does not have the focus, so the plain-text fallback and its message were checked instead of the formatted copy');
+      assert.deepStrictEqual(told('info'), []);
+      assert.strictEqual(told('error').length, 1);
+      assert.match(told('error')[0], /^Formatted text could not be copied \(the editor does not have the keyboard focus\), so the document was copied as Markdown text instead\. For formatted text, click into the editor and choose Copy as Formatted Text from its Export menu\.$/);
+    }
+    // From the Export menu of the toolbar too.
+    api.resetUi();
+    await api.fromWebview(uri, { type: 'export', action: 'copyFormatted' });
+    await until(() => told('info').length + told('error').length === 1, 'the notification');
+    assert.deepStrictEqual(opened(), []);
+  });
+
+  test('without an editor of ours, copies the Markdown text and offers to open the file', async () => {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    const uri = vscode.Uri.file(path.join(dir, 'notes', 'other.md'));
+    await vscode.env.clipboard.writeText('');
+    api.resetUi();
+    assert.strictEqual(await vscode.commands.executeCommand('seamlessMarkdown.copyFormatted', uri), 'plain');
+    assert.deepStrictEqual(opened(), []);
+    assert.strictEqual(lf(await vscode.env.clipboard.readText()), lf(fs.readFileSync(uri.fsPath, 'utf8')));
+    const shown = api.shown().filter((entry) => entry.kind === 'info');
+    assert.strictEqual(shown.length, 1);
+    assert.strictEqual(shown[0].text, 'Copied the document as Markdown text, without formatting: formatted text can only be copied from the Seamless Markdown editor.');
+    assert.deepStrictEqual(shown[0].actions, ['Open in Seamless Markdown']);
+  });
+
   test('builds the outline from the headings', async () => {
     const { uri } = await open('features.md');
     const outline = await api.outline(uri);

@@ -23,7 +23,7 @@ describe('the Export menu of the toolbar', () => {
     expect(menu()).toBeNull();
     button.click();
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect([...menu()!.querySelectorAll('[role=menuitem] > span')].map((e) => e.textContent)).toEqual(['Export as HTML…', 'Export as PDF…', 'Copy as HTML', 'Email Document…']);
+    expect([...menu()!.querySelectorAll('[role=menuitem] > span')].map((e) => e.textContent)).toEqual(['Export as HTML…', 'Export as PDF…', 'Copy as Formatted Text', 'Copy as HTML', 'Email Document…']);
     item('html').click();
     expect(asked).toEqual(['html']);
     // Choosing closes the menu.
@@ -32,10 +32,12 @@ describe('the Export menu of the toolbar', () => {
     button.click();
     item('pdf').click();
     button.click();
+    item('copyFormatted').click();
+    button.click();
     item('copyHtml').click();
     button.click();
     item('email').click();
-    expect(asked).toEqual(['html', 'pdf', 'copyHtml', 'email']);
+    expect(asked).toEqual(['html', 'pdf', 'copyFormatted', 'copyHtml', 'email']);
   });
 
   it('shows the PDF entry disabled with the reason while no browser can print', () => {
@@ -65,7 +67,7 @@ describe('the Export menu of the toolbar', () => {
     expect(document.activeElement).toBe(item('html'));
     // The disabled entry is skipped.
     menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    expect(document.activeElement).toBe(item('copyHtml'));
+    expect(document.activeElement).toBe(item('copyFormatted'));
     menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     expect(document.activeElement).toBe(item('html'));
     menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));

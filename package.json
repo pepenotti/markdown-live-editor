@@ -307,6 +307,11 @@
         "category": "Seamless Markdown"
       },
       {
+        "command": "seamlessMarkdown.copyFormatted",
+        "title": "Copy as Formatted Text",
+        "category": "Seamless Markdown"
+      },
+      {
         "command": "seamlessMarkdown.revealLine",
         "title": "Go to Line",
         "category": "Seamless Markdown"
@@ -582,6 +587,10 @@
           "when": "resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor'"
         },
         {
+          "command": "seamlessMarkdown.copyFormatted",
+          "when": "resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor'"
+        },
+        {
           "command": "seamlessMarkdown.revealLine",
           "when": "false"
         },
@@ -615,6 +624,11 @@
           "command": "seamlessMarkdown.emailDocument",
           "when": "(resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
           "group": "seamlessMarkdown.export@3"
+        },
+        {
+          "command": "seamlessMarkdown.copyFormatted",
+          "when": "(resourceLangId == markdown || activeCustomEditorId == 'seamlessMarkdown.editor') && !isInDiffEditor",
+          "group": "seamlessMarkdown.export@4"
         }
       ],
       "explorer/context": [
@@ -637,6 +651,11 @@
           "command": "seamlessMarkdown.emailDocument",
           "when": "resourceLangId == markdown",
           "group": "seamlessMarkdown.export@3"
+        },
+        {
+          "command": "seamlessMarkdown.copyFormatted",
+          "when": "resourceLangId == markdown",
+          "group": "seamlessMarkdown.export@4"
         }
       ]
     },

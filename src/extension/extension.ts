@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { type CommandId, type HostMessage, type Mode, MODE_LABELS, MODES, VIEW_TYPE, type WebviewMessage } from '../shared/protocol';
 import { buildOutline, extractHeadings } from '../shared/textUtil';
-import { emailDocument } from './email';
+import { copyFormatted, emailDocument } from './email';
 import { detectBrowser, type ExportContext, exportHtml, exportPdf, lastExport, removeTempFiles, wikiHrefs } from './export';
 import { isNotePath } from '../shared/wikiLinks';
 import { BacklinksProvider } from './backlinks';
@@ -230,33 +230,39 @@ export function activate(context: vscode.ExtensionContext): unknown {
   };
   register('copyAsHtml', (resource?: unknown) => copyAsHtml(resource));
 
-  /** Copies the document for a mail and opens a new message. See src/extension/email.ts. */
-  const runEmail = async (resource?: unknown, from?: Session) => {
-    const document = from?.document ?? (await documentFor(resource));
-    if (!document) return undefined;
-    try {
-      await flush(document);
-      // The editor the user is in, if it shows this document; otherwise any editor of ours that does.
-      const sessions = provider.sessionsFor(document.uri);
-      const current = from ?? sessions.find((s) => s === provider.active);
-      return await emailDocument(document, {
-        session: current ?? sessions[0],
-        useSelection: current !== undefined,
-        notes: provider.notes,
-        openInEditor: (uri) => vscode.commands.executeCommand('seamlessMarkdown.openWith', uri),
-      });
-    } catch (err) {
-      void ui.error(`Email Document failed: ${err instanceof Error ? err.message : String(err)}`);
-      return undefined;
-    }
-  };
+  /** Copies the document as formatted text, and for Email Document opens a new message. See src/extension/email.ts. */
+  const pasting =
+    (name: string, run: typeof emailDocument | typeof copyFormatted) =>
+    async (resource?: unknown, from?: Session): Promise<'formatted' | 'plain' | undefined> => {
+      const document = from?.document ?? (await documentFor(resource));
+      if (!document) return undefined;
+      try {
+        await flush(document);
+        // The editor the user is in, if it shows this document; otherwise any editor of ours that does.
+        const sessions = provider.sessionsFor(document.uri);
+        const current = from ?? sessions.find((s) => s === provider.active);
+        return await run(document, {
+          session: current ?? sessions[0],
+          useSelection: current !== undefined,
+          notes: provider.notes,
+          openInEditor: (uri) => vscode.commands.executeCommand('seamlessMarkdown.openWith', uri),
+        });
+      } catch (err) {
+        void ui.error(`${name} failed: ${err instanceof Error ? err.message : String(err)}`);
+        return undefined;
+      }
+    };
+  const runEmail = pasting('Email Document', emailDocument);
+  const runCopyFormatted = pasting('Copy as Formatted Text', copyFormatted);
   register('emailDocument', (resource?: unknown) => runEmail(resource));
+  register('copyFormatted', (resource?: unknown) => runCopyFormatted(resource));
 
   // The Export menu in the toolbar of an editor.
   provider.exportHandler = (session, action) => {
     if (action === 'html') void runExportHtml(session.document.uri);
     else if (action === 'pdf') void runExportPdf(session.document.uri);
     else if (action === 'email') void runEmail(undefined, session);
+    else if (action === 'copyFormatted') void runCopyFormatted(undefined, session);
     else void copyAsHtml(undefined, session);
   };
 
