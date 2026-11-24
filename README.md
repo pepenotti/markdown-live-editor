@@ -69,7 +69,8 @@ Use the **Export** button in the toolbar, right-click a Markdown file in the Exp
 
 - **Export as HTML** writes one self-contained file: styles, images, math and diagrams are all inside it.
 - **Export as PDF** writes a PDF in one step. It needs Chrome, Edge, Chromium or Brave installed; without one, the command is not offered.
-- **Copy as HTML** copies the selection or the whole document.
+- **Copy as Formatted Text** copies the selection or the whole document as formatted text, ready to paste into a mail, a document or a chat. Like Email Document, it needs the file open in this editor, and local images, diagrams and math become short placeholders.
+- **Copy as HTML** copies the selection or the whole document as HTML source.
 - **Email Document** copies the document as formatted text and opens a new email with the subject filled in; you paste. Formatting needs the file open in this editor, and local images, diagrams and math are replaced by short placeholders, because a pasted email cannot carry them.
 
 Exported files contain no scripts and load nothing from the network.

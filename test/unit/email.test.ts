@@ -266,3 +266,19 @@ describe('where Email Document is offered', () => {
     expect(pkg.contributes.configuration.properties['seamlessMarkdown.email.to']).toMatchObject({ type: 'string', default: '' });
   });
 });
+
+describe('where Copy as Formatted Text is offered', () => {
+  const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+  const menus = pkg.contributes.menus as Record<string, { command: string; when?: string; group?: string }[]>;
+  const entry = (menu: string) => menus[menu].find((item) => item.command === 'seamlessMarkdown.copyFormatted');
+
+  it('next to Email Document, in the same places as the exports', () => {
+    expect(pkg.contributes.commands.find((c: { command: string }) => c.command === 'seamlessMarkdown.copyFormatted')).toMatchObject({ title: 'Copy as Formatted Text', category: 'Seamless Markdown' });
+    for (const menu of ['commandPalette', 'explorer/context', 'editor/title']) {
+      const html = menus[menu].find((item) => item.command === 'seamlessMarkdown.exportHtml')!;
+      expect(entry(menu)?.when, menu).toBe(html.when);
+    }
+    expect(entry('editor/title')?.group).toBe('seamlessMarkdown.export@4');
+    expect(entry('explorer/context')?.group).toBe('seamlessMarkdown.export@4');
+  });
+});

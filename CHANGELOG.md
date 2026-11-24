@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Copy as Formatted Text** in the Export menu: the same copy as Email Document, without opening the mail app, for pasting into a mail, a document or a chat.
 - Fixed: typing in a tall table, one with long cells, could make the view jump away and send the next keys into the text below the table instead of the cell.
 
 ## 0.6.2

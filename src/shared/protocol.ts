@@ -41,8 +41,8 @@ export interface EditorConfig {
 }
 
 /** What the Export menu of the toolbar asks the host to do. */
-export type ExportAction = 'html' | 'pdf' | 'copyHtml' | 'email';
-export const EXPORT_ACTIONS: readonly ExportAction[] = ['html', 'pdf', 'copyHtml', 'email'];
+export type ExportAction = 'html' | 'pdf' | 'copyFormatted' | 'copyHtml' | 'email';
+export const EXPORT_ACTIONS: readonly ExportAction[] = ['html', 'pdf', 'copyFormatted', 'copyHtml', 'email'];
 
 /** How the editor put formatted text on the clipboard: the Clipboard API, or a copy command on a hidden selection. */
 export type RichCopyResult = { ok: true; how: 'api' | 'command' } | { ok: false; error: string };

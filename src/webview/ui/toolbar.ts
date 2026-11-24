@@ -70,6 +70,7 @@ const HEADING_LABELS = ['Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 
 const EXPORT_ITEMS: { action: ExportAction; label: string }[] = [
   { action: 'html', label: 'Export as HTML…' },
   { action: 'pdf', label: 'Export as PDF…' },
+  { action: 'copyFormatted', label: 'Copy as Formatted Text' },
   { action: 'copyHtml', label: 'Copy as HTML' },
   { action: 'email', label: 'Email Document…' },
 ];
